@@ -13,17 +13,7 @@ const generateFlashcardsFromNoteToolInputSchema = generateFlashcardsFromNoteInpu
 });
 
 export function buildFlashcardTools(flashcardService: FlashcardService): ToolDefinition[] {
-  return [
-    {
-      name: "get_dummy_flashcards_for_note",
-      description: "Returns dummy flashcards for a note without calling external services.",
-      inputSchema: getDummyFlashcardsInputSchema,
-      async execute(input) {
-        const noteSqid = input.noteSqid;
-        return flashcardService.getDummyGeneratedFlashcards(noteSqid);
-      },
-    },
-    {
+   return [{
       name: "generate_flashcards_from_note",
       description: "Fetches a note from the EducAIte API, generates flashcards, and persists them through the bulk flashcard endpoint.",
       inputSchema: generateFlashcardsFromNoteToolInputSchema,
@@ -35,7 +25,6 @@ export function buildFlashcardTools(flashcardService: FlashcardService): ToolDef
           },
           input.authorizationHeader,
         );
-      },
-    },
-  ];
+      }
+    }];
 }
