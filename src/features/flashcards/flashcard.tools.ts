@@ -18,12 +18,13 @@ export function buildFlashcardTools(flashcardService: FlashcardService): ToolDef
       description: "Fetches a note from the EducAIte API, generates flashcards, and persists them through the bulk flashcard endpoint.",
       inputSchema: generateFlashcardsFromNoteToolInputSchema,
       async execute(input) {
+        const parsedInput = generateFlashcardsFromNoteToolInputSchema.parse(input);
         return flashcardService.generateFromNote(
           {
-            noteSqid: input.noteSqid,
-            flashcardCount: input.flashcardCount,
+            noteSqid: parsedInput.noteSqid,
+            flashcardCount: parsedInput.flashcardCount,
           },
-          input.authorizationHeader,
+          parsedInput.authorizationHeader,
         );
       }
     }];

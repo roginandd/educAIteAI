@@ -9,6 +9,7 @@ export const envSchema = z.object({
   GOOGLE_ADK_APP_NAME: z.string().min(1).default("educAIteAI"),
   EDUCAITE_API_BASE_URL: z.string().url().default("http://localhost:5126"),
   GOOGLE_GENAI_MODEL: z.string().min(1).default("gemini-2.0-flash"),
+  GOOGLE_GENAI_NOTE_PDF_MODEL: z.string().min(1).default("gemini-3-pro-preview"),
 });
 
 export type Env = z.output<typeof envSchema>;
@@ -21,4 +22,5 @@ export const env: Env = envSchema.parse({
   GOOGLE_ADK_APP_NAME: process.env.GOOGLE_ADK_APP_NAME,
   EDUCAITE_API_BASE_URL: process.env.EDUCAITE_API_BASE_URL,
   GOOGLE_GENAI_MODEL: process.env.GOOGLE_GENAI_MODEL,
+  GOOGLE_GENAI_NOTE_PDF_MODEL: process.env.GOOGLE_GENAI_NOTE_PDF_MODEL,
 });

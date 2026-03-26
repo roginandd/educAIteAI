@@ -174,9 +174,31 @@ function extractErrorMessage(payload: unknown): string | null {
     return directMessage;
   }
 
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
   const nestedMessage = (payload as { error?: { message?: unknown } }).error?.message;
   if (typeof nestedMessage === "string" && nestedMessage.trim()) {
     return nestedMessage;
+  }
+
+  const title = (payload as { title?: unknown }).title;
+  if (typeof title === "string" && title.trim()) {
+    return title;
+  }
+
+  const validationErrors = (payload as { errors?: unknown }).errors;
+  if (typeof validationErrors === "object" && validationErrors !== null) {
+    for (const value of Object.values(validationErrors)) {
+      if (Array.isArray(value)) {
+        const firstMessage = value.find((item) => typeof item === "string" && item.trim());
+        if (typeof firstMessage === "string") {
+          return firstMessage;
+        }
+      }
+    }
   }
 
   return null;
