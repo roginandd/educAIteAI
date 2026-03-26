@@ -9,15 +9,16 @@ Output contract:
   - "schoolYearStart"
   - "schoolYearEnd"
   - "courses"
-- "semester" must be an integer such as 1, 2, 3, or 4.
+- "semester" must be an integer such as 1, 2, 3.
+- 
 - "schoolYearStart" and "schoolYearEnd" must be four-digit integers.
 - Each item must contain only "edpCode", "courseName", and "units".
 - Return JSON only. No markdown, commentary, headings, or wrapper text.
 
 Extraction rules:
 - Use only the provided PDF content.
-- Extract semester and school year from the studyload header when present.
-- Pay special attention to the top-right studyload header where the format commonly appears like "1st S.Y 2025-2026" or "2nd S.Y 2025-2026".
+- Extract semester and school year from the studyload header when present.  
+- Pay special attention to the top-right studyload header where the format commonly appears like "1st S.Y 2025-2026".
 - Normalize ordinal semester text such as "1st", "2nd", "3rd", or "4th" into the integer semester value.
 - Extract only real course rows.
 - Ignore headers, footers, totals, page numbers, student metadata, and non-course text.
