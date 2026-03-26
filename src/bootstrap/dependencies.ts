@@ -1,5 +1,5 @@
 import { createFlashcardsGenerationRunner } from "../agents/flashcards/agent";
-import { createNotesGenerationRunner } from "../agents/notes/agent";
+import { createNotesGenerationRunner, createNotesSummarizationRunner } from "../agents/notes/agent";
 import { createStudyLoadParsingRunner } from "../agents/studyloads/agent";
 import { FlashcardService } from "../features/flashcards/flashcard.service";
 import { NoteService } from "../features/notes/note.service";
@@ -14,7 +14,7 @@ export interface AppDependencies {
 
 export function createDependencies(): AppDependencies {
   const flashcardService = new FlashcardService(createFlashcardsGenerationRunner());
-  const noteService = new NoteService(createNotesGenerationRunner());
+  const noteService = new NoteService(createNotesGenerationRunner(), createNotesSummarizationRunner());
   const studyLoadService = new StudyLoadService(createStudyLoadParsingRunner());
 
   return {

@@ -4,6 +4,9 @@ import {
   generateNoteFromDocumentBodySchema,
   generateNoteFromDocumentInputSchema,
   generateNoteFromDocumentParamsSchema,
+  summarizeNoteBodySchema,
+  summarizeNoteInputSchema,
+  summarizeNoteParamsSchema,
 } from "./note.dto";
 import { NoteService } from "./note.service";
 
@@ -20,6 +23,20 @@ export class NoteController {
     });
 
     const result = await this.noteService.generateFromDocument(input, req.header("authorization"));
+
+    res.status(200).json(result);
+  };
+
+  summarize = async (req: Request, res: Response): Promise<void> => {
+    const params = summarizeNoteParamsSchema.parse(req.params);
+    const body = summarizeNoteBodySchema.parse(req.body ?? {});
+
+    const input = summarizeNoteInputSchema.parse({
+      noteSqid: params.noteSqid,
+      style: body.style,
+    });
+
+    const result = await this.noteService.summarizeNote(input, req.header("authorization"));
 
     res.status(200).json(result);
   };

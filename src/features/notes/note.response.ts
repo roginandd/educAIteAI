@@ -21,6 +21,15 @@ export const generateNoteFromDocumentResponseSchema = z.object({
   note: noteApiResponseSchema,
 });
 
+export const summarizeNoteResponseSchema = z.object({
+  noteSqid: z.string().trim().min(1),
+  originalContent: z.string().trim().min(1),
+  summarizedContent: z.string().trim().min(1),
+  model: z.string().trim().min(1),
+  generatedAt: z.string().datetime(),
+});
+
 export type DocumentApiResponse = z.output<typeof documentApiResponseSchema>;
 export type SignedUrlResponse = z.output<typeof signedUrlResponseSchema>;
 export type GenerateNoteFromDocumentResponse = z.output<typeof generateNoteFromDocumentResponseSchema>;
+export type SummarizeNoteResponse = z.output<typeof summarizeNoteResponseSchema>;

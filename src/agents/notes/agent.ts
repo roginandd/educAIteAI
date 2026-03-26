@@ -2,10 +2,10 @@ import { InMemoryRunner, LlmAgent } from "@google/adk";
 
 import type { AppDependencies } from "../../bootstrap/dependencies";
 import { env } from "../../config/env";
-import { noteGenerationOutputSchema } from "../../features/notes/note.dto";
+import { noteGenerationOutputSchema, summarizeNoteOutputSchema } from "../../features/notes/note.dto";
 import { buildNoteTools } from "../../features/notes/note.tools";
 import type { AgentDefinition } from "../../shared/types/agent-definition";
-import { noteGenerationAgentInstructions, notesAgentInstructions } from "./instructions";
+import { noteGenerationAgentInstructions, notesAgentInstructions, noteSummarizationAgentInstructions } from "./instructions";
 
 export function createNotesAgent(dependencies: AppDependencies): AgentDefinition {
   return {
@@ -34,5 +34,26 @@ export function createNotesGenerationRunner(): InMemoryRunner {
   return new InMemoryRunner({
     appName: env.GOOGLE_ADK_APP_NAME,
     agent: createNoteGenerationAgent(),
+  });
+}
+
+export function createNoteSummarizationAgent(): LlmAgent {
+  return new LlmAgent({
+    name: "note_summarization_agent",
+    description: "Generates a preview summary from a persisted note.",
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: noteSummarizationAgentInstructions,
+    outputSchema: summarizeNoteOutputSchema,
+    outputKey: "note_summarization_output",
+    generateContentConfig: {
+      temperature: 0.2,
+    },
+  });
+}
+
+export function createNotesSummarizationRunner(): InMemoryRunner {
+  return new InMemoryRunner({
+    appName: env.GOOGLE_ADK_APP_NAME,
+    agent: createNoteSummarizationAgent(),
   });
 }
