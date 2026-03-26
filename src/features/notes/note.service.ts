@@ -8,24 +8,33 @@ import { BadGatewayError } from "../../shared/errors/bad-gateway-error";
 import { UnauthorizedError } from "../../shared/errors/unauthorized-error";
 import {
   createNoteRequestSchema,
-  noteGenerationOutputSchema,
   generateNoteFromDocumentInputSchema,
   noteApiResponseSchema,
+  noteGenerationOutputSchema,
+  summarizeNoteInputSchema,
+  summarizeNoteOutputSchema,
   type GenerateNoteFromDocumentInput,
   type NoteGenerationOutput,
   type NoteApiResponse,
+  type SummarizeNoteInput,
+  type SummarizeNoteOutput,
 } from "./note.dto";
 import {
   documentApiResponseSchema,
   generateNoteFromDocumentResponseSchema,
   signedUrlResponseSchema,
+  summarizeNoteResponseSchema,
   type DocumentApiResponse,
   type GenerateNoteFromDocumentResponse,
   type SignedUrlResponse,
+  type SummarizeNoteResponse,
 } from "./note.response";
 
 export class NoteService {
-  constructor(private readonly generationRunner: Runner) {}
+  constructor(
+    private readonly generationRunner: Runner,
+    private readonly summarizationRunner: Runner,
+  ) {}
 
   async generateFromDocument(
     input: GenerateNoteFromDocumentInput,
@@ -54,6 +63,29 @@ export class NoteService {
     });
   }
 
+  async summarizeNote(
+    input: SummarizeNoteInput,
+    authorizationHeader: string | undefined,
+  ): Promise<SummarizeNoteResponse> {
+    const parsedInput = summarizeNoteInputSchema.parse(input);
+    const authHeader = this.requireAuthorizationHeader(authorizationHeader);
+
+    const note = await this.fetchNote(parsedInput.noteSqid, authHeader);
+    if (!note.noteContent.trim()) {
+      throw new AppError("Note content is empty and cannot be summarized.", "VALIDATION_ERROR", 400);
+    }
+
+    const summary = await this.summarizeNoteWithAgent(note.name, note.noteContent, parsedInput.style);
+
+    return summarizeNoteResponseSchema.parse({
+      noteSqid: note.sqid,
+      originalContent: note.noteContent,
+      summarizedContent: summary.summarizedContent,
+      model: env.GOOGLE_GENAI_MODEL,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
   private requireAuthorizationHeader(headerValue: string | undefined): string {
     if (!headerValue?.trim()) {
       throw new UnauthorizedError();
@@ -73,6 +105,19 @@ export class NoteService {
 
     const data = await this.parseJsonResponse(response, "Unable to fetch document from EducAIte API.");
     return documentApiResponseSchema.parse(data);
+  }
+
+  private async fetchNote(noteSqid: string, authorizationHeader: string): Promise<NoteApiResponse> {
+    const response = await fetch(`${env.EDUCAITE_API_BASE_URL}/api/note/${encodeURIComponent(noteSqid)}`, {
+      method: "GET",
+      headers: {
+        Authorization: authorizationHeader,
+        Accept: "application/json",
+      },
+    });
+
+    const data = await this.parseJsonResponse(response, "Unable to fetch note from EducAIte API.");
+    return noteApiResponseSchema.parse(data);
   }
 
   private async getDocumentSignedUrl(
@@ -124,6 +169,17 @@ export class NoteService {
     const parsedJson = parseJson(finalResponseText, "Note generation agent returned invalid JSON.");
 
     return noteGenerationOutputSchema.parse(parsedJson);
+  }
+
+  private async summarizeNoteWithAgent(
+    noteName: string,
+    noteContent: string,
+    style?: SummarizeNoteInput["style"],
+  ): Promise<SummarizeNoteOutput> {
+    const finalResponseText = await this.runNoteSummarizationAgent(noteName, noteContent, style);
+    const parsedJson = parseJson(finalResponseText, "Note summarization agent returned invalid JSON.");
+
+    return summarizeNoteOutputSchema.parse(parsedJson);
   }
 
   private async createNote(
@@ -216,6 +272,48 @@ export class NoteService {
 
     return finalResponseText;
   }
+
+  private async runNoteSummarizationAgent(
+    noteName: string,
+    noteContent: string,
+    style?: SummarizeNoteInput["style"],
+  ): Promise<string> {
+    const message: Content = {
+      role: "user",
+      parts: [{ text: buildNoteSummarizationPrompt(noteName, noteContent, style) }],
+    };
+
+    let finalResponseText: string | null = null;
+
+    for await (const event of this.summarizationRunner.runEphemeral({
+      userId: "note_summary_service",
+      newMessage: message,
+    })) {
+      if (event.errorMessage) {
+        throw new BadGatewayError(event.errorMessage);
+      }
+
+      if (!isFinalResponse(event)) {
+        continue;
+      }
+
+      const structuredOutput = event.actions.stateDelta.note_summarization_output;
+      if (structuredOutput) {
+        return JSON.stringify(structuredOutput);
+      }
+
+      const content = stringifyContent(event).trim();
+      if (content) {
+        finalResponseText = content;
+      }
+    }
+
+    if (!finalResponseText) {
+      throw new BadGatewayError("Note summarization agent did not return a final response.");
+    }
+
+    return finalResponseText;
+  }
 }
 
 function extractErrorMessage(payload: unknown): string | null {
@@ -289,4 +387,30 @@ function buildNoteGenerationPrompt(documentName: string): string {
     "Write noteContent as clean study text suitable for review.",
     "Prefer short sections, concise explanations, and faithful terminology from the PDF.",
   ].join("\n");
+}
+
+function buildNoteSummarizationPrompt(
+  noteName: string,
+  noteContent: string,
+  style?: SummarizeNoteInput["style"],
+): string {
+  const instructions = [
+    "Summarize the following note.",
+    'Return only JSON matching this shape: {"summarizedContent":"..."}.',
+    "Preserve factual meaning, important terminology, formulas, and essential structure.",
+    "Keep the result as a single Markdown string with \\n line breaks.",
+    `Summary style: ${style ?? "default"}.`,
+    "If style is concise, make the summary much more straightforward and compressed.",
+    "If style is default, produce the normal balanced summary.",
+    "If style is detailed, keep more supporting detail while still summarizing.",
+  ];
+
+  instructions.push(
+    "",
+    `Note title: ${noteName}`,
+    "Original note content:",
+    noteContent,
+  );
+
+  return instructions.join("\n");
 }
