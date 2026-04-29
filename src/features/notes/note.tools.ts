@@ -15,7 +15,7 @@ const summarizeNoteToolInputSchema = summarizeNoteInputSchema.extend({
 export function buildNoteTools(noteService: NoteService): ToolDefinition[] {
   return [{
     name: "generate_note_from_document",
-    description: "Fetches a persisted document, generates a note from its PDF, and persists the note through the EducAIte API.",
+    description: "Fetches a persisted document, reuses an existing generated note for the same artifact when available, otherwise generates and persists a new note.",
     inputSchema: generateNoteFromDocumentToolInputSchema,
     async execute(input) {
       const parsedInput = generateNoteFromDocumentToolInputSchema.parse(input);
@@ -40,6 +40,26 @@ export function buildNoteTools(noteService: NoteService): ToolDefinition[] {
         },
         parsedInput.authorizationHeader,
       );
+    },
+  }];
+}
+
+export function buildNoteAgentTools(noteService: NoteService, authorizationHeader: string): ToolDefinition[] {
+  return [{
+    name: "generate_note_from_document",
+    description: "Fetches a persisted document, reuses an existing generated note for the same artifact when available, otherwise generates and persists a new note.",
+    inputSchema: generateNoteFromDocumentInputSchema,
+    async execute(input) {
+      const parsedInput = generateNoteFromDocumentInputSchema.parse(input);
+      return noteService.generateFromDocument(parsedInput, authorizationHeader);
+    },
+  }, {
+    name: "summarize_note",
+    description: "Fetches a persisted note, generates a preview summary, and returns it without persisting any changes.",
+    inputSchema: summarizeNoteInputSchema,
+    async execute(input) {
+      const parsedInput = summarizeNoteInputSchema.parse(input);
+      return noteService.summarizeNote(parsedInput, authorizationHeader);
     },
   }];
 }

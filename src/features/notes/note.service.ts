@@ -1,11 +1,15 @@
 import type { Content } from "@google/genai";
-import { createPartFromBase64, createPartFromText } from "@google/genai";
 import { isFinalResponse, stringifyContent, type Runner } from "@google/adk";
 
 import { env } from "../../config/env";
 import { AppError } from "../../shared/errors/app-error";
 import { BadGatewayError } from "../../shared/errors/bad-gateway-error";
+import { AppError as UpstreamAppError } from "../../shared/errors/app-error";
 import { UnauthorizedError } from "../../shared/errors/unauthorized-error";
+import { UpstreamHttpClient } from "../../shared/http/upstream-http-client";
+import { PdfExtractionService } from "../../shared/pdf/pdf-extraction.service";
+import { PdfProcessingService } from "../../shared/pdf/pdf-processing.service";
+import { GeneratedNoteArtifactRepository } from "./generated-note-artifact.repository";
 import {
   createNoteRequestSchema,
   generateNoteFromDocumentInputSchema,
@@ -34,6 +38,10 @@ export class NoteService {
   constructor(
     private readonly generationRunner: Runner,
     private readonly summarizationRunner: Runner,
+    private readonly upstreamHttpClient: UpstreamHttpClient,
+    private readonly pdfProcessingService: PdfProcessingService,
+    private readonly pdfExtractionService: PdfExtractionService,
+    private readonly generatedNoteArtifactRepository: GeneratedNoteArtifactRepository,
   ) {}
 
   async generateFromDocument(
@@ -45,8 +53,25 @@ export class NoteService {
 
     const document = await this.fetchDocument(parsedInput.documentSqid, authHeader);
     const signedUrl = await this.getDocumentSignedUrl(parsedInput.documentSqid, parsedInput.expiresInMinutes, authHeader);
-    const pdfBytes = await this.downloadPdfAsBytes(signedUrl.url);
-    const generatedNote = await this.generateNoteWithAgent(document.documentName, pdfBytes);
+    const artifactVersionToken = `${document.fileMetadataSqid}:${document.updatedAt.toISOString()}`;
+    const extractedArtifact = await this.pdfExtractionService.ensureExtraction({
+      sourceType: "document",
+      sourceSqid: document.sqid,
+      fileMetadataSqid: document.fileMetadataSqid,
+      versionToken: artifactVersionToken,
+      signedUrl: signedUrl.url,
+      displayName: document.documentName,
+    });
+    const existingNote = await this.findExistingGeneratedNote(document.sqid, extractedArtifact.versionToken, authHeader);
+    if (existingNote) {
+      return generateNoteFromDocumentResponseSchema.parse({
+        documentSqid: document.sqid,
+        source: "existing",
+        note: existingNote,
+      });
+    }
+
+    const generatedNote = await this.generateNoteWithAgent(document.documentName, extractedArtifact.extractedText);
     const createdNote = await this.createNote(
       {
         name: this.normalizeGeneratedNoteName(document.documentName, generatedNote.name),
@@ -55,6 +80,12 @@ export class NoteService {
       },
       authHeader,
     );
+    await this.generatedNoteArtifactRepository.upsert({
+      documentSqid: document.sqid,
+      noteSqid: createdNote.sqid,
+      fileMetadataSqid: document.fileMetadataSqid,
+      artifactVersionToken: extractedArtifact.versionToken,
+    });
 
     return generateNoteFromDocumentResponseSchema.parse({
       documentSqid: document.sqid,
@@ -95,29 +126,37 @@ export class NoteService {
   }
 
   private async fetchDocument(documentSqid: string, authorizationHeader: string): Promise<DocumentApiResponse> {
-    const response = await fetch(`${env.EDUCAITE_API_BASE_URL}/api/document/${encodeURIComponent(documentSqid)}`, {
+    const data = await this.upstreamHttpClient.getJson(`/api/document/${encodeURIComponent(documentSqid)}`, {
       method: "GET",
       headers: {
         Authorization: authorizationHeader,
         Accept: "application/json",
       },
-    });
-
-    const data = await this.parseJsonResponse(response, "Unable to fetch document from EducAIte API.");
+    }, "Unable to fetch document from EducAIte API.");
     return documentApiResponseSchema.parse(data);
   }
 
   private async fetchNote(noteSqid: string, authorizationHeader: string): Promise<NoteApiResponse> {
-    const response = await fetch(`${env.EDUCAITE_API_BASE_URL}/api/note/${encodeURIComponent(noteSqid)}`, {
+    const data = await this.upstreamHttpClient.getJson(`/api/note/${encodeURIComponent(noteSqid)}`, {
       method: "GET",
       headers: {
         Authorization: authorizationHeader,
         Accept: "application/json",
       },
-    });
-
-    const data = await this.parseJsonResponse(response, "Unable to fetch note from EducAIte API.");
+    }, "Unable to fetch note from EducAIte API.");
     return noteApiResponseSchema.parse(data);
+  }
+
+  private async fetchNoteOrNull(noteSqid: string, authorizationHeader: string): Promise<NoteApiResponse | null> {
+    try {
+      return await this.fetchNote(noteSqid, authorizationHeader);
+    } catch (error) {
+      if (error instanceof UpstreamAppError && error.statusCode === 404) {
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   private async getDocumentSignedUrl(
@@ -129,8 +168,8 @@ export class NoteService {
       expiresInMinutes: String(expiresInMinutes),
     });
 
-    const response = await fetch(
-      `${env.EDUCAITE_API_BASE_URL}/api/document/${encodeURIComponent(documentSqid)}/signed-url?${query.toString()}`,
+    const data = await this.upstreamHttpClient.getJson(
+      `/api/document/${encodeURIComponent(documentSqid)}/signed-url?${query.toString()}`,
       {
         method: "GET",
         headers: {
@@ -138,37 +177,22 @@ export class NoteService {
           Accept: "application/json",
         },
       },
+      "Unable to generate a signed URL for the document PDF.",
     );
-
-    const data = await this.parseJsonResponse(response, "Unable to generate a signed URL for the document PDF.");
     return signedUrlResponseSchema.parse(data);
   }
 
-  private async downloadPdfAsBytes(signedUrl: string): Promise<Uint8Array> {
-    const response = await fetch(signedUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/pdf",
-      },
+  private async generateNoteWithAgent(documentName: string, extractedText: string): Promise<NoteGenerationOutput> {
+    return this.pdfProcessingService.runStructuredTextAgent({
+      runner: this.generationRunner,
+      userId: "note_service",
+      prompt: buildNoteGenerationPrompt(documentName),
+      sourceText: extractedText,
+      outputKey: "note_generation_output",
+      outputSchema: noteGenerationOutputSchema,
+      invalidJsonMessage: "Note generation agent returned invalid JSON.",
+      noResponseMessage: "Note generation agent did not return a final response.",
     });
-
-    if (!response.ok) {
-      throw new BadGatewayError("Unable to download the document PDF from the signed URL.");
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    if (arrayBuffer.byteLength === 0) {
-      throw new BadGatewayError("Document PDF download returned an empty file.");
-    }
-
-    return new Uint8Array(arrayBuffer);
-  }
-
-  private async generateNoteWithAgent(documentName: string, pdfBytes: Uint8Array): Promise<NoteGenerationOutput> {
-    const finalResponseText = await this.runNoteGenerationAgent(documentName, pdfBytes);
-    const parsedJson = parseJson(finalResponseText, "Note generation agent returned invalid JSON.");
-
-    return noteGenerationOutputSchema.parse(parsedJson);
   }
 
   private async summarizeNoteWithAgent(
@@ -187,8 +211,7 @@ export class NoteService {
     authorizationHeader: string,
   ): Promise<NoteApiResponse> {
     const payload = createNoteRequestSchema.parse(note);
-
-    const response = await fetch(`${env.EDUCAITE_API_BASE_URL}/api/note`, {
+    const data = await this.upstreamHttpClient.getJson("/api/note", {
       method: "POST",
       headers: {
         Authorization: authorizationHeader,
@@ -196,9 +219,7 @@ export class NoteService {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
-    });
-
-    const data = await this.parseJsonResponse(response, "Unable to create generated note through EducAIte API.");
+    }, "Unable to create generated note through EducAIte API.");
     return noteApiResponseSchema.parse(data);
   }
 
@@ -211,66 +232,26 @@ export class NoteService {
     return canonicalName;
   }
 
-  private async parseJsonResponse(response: Response, fallbackMessage: string): Promise<unknown> {
-    const rawBody = await response.text();
-    const parsedBody = rawBody ? tryParseJson(rawBody) : null;
-
-    if (!response.ok) {
-      const message = extractErrorMessage(parsedBody) ?? fallbackMessage;
-
-      if (response.status >= 500) {
-        throw new BadGatewayError(message);
-      }
-
-      throw new AppError(message, `UPSTREAM_${response.status}`, response.status);
+  private async findExistingGeneratedNote(
+    documentSqid: string,
+    artifactVersionToken: string,
+    authorizationHeader: string,
+  ): Promise<NoteApiResponse | null> {
+    const generatedNoteArtifact = await this.generatedNoteArtifactRepository.findByDocumentVersion(
+      documentSqid,
+      artifactVersionToken,
+    );
+    if (!generatedNoteArtifact) {
+      return null;
     }
 
-    if (parsedBody === null) {
-      throw new BadGatewayError(fallbackMessage);
+    const note = await this.fetchNoteOrNull(generatedNoteArtifact.noteSqid, authorizationHeader);
+    if (!note || note.documentSqid !== documentSqid) {
+      await this.generatedNoteArtifactRepository.deleteById(generatedNoteArtifact.id);
+      return null;
     }
 
-    return parsedBody;
-  }
-
-  private async runNoteGenerationAgent(documentName: string, pdfBytes: Uint8Array): Promise<string> {
-    const message: Content = {
-      role: "user",
-      parts: [
-        createPartFromText(buildNoteGenerationPrompt(documentName)),
-        createPartFromBase64(Buffer.from(pdfBytes).toString("base64"), "application/pdf"),
-      ],
-    };
-
-    let finalResponseText: string | null = null;
-
-    for await (const event of this.generationRunner.runEphemeral({
-      userId: "note_service",
-      newMessage: message,
-    })) {
-      if (event.errorMessage) {
-        throw new BadGatewayError(event.errorMessage);
-      }
-
-      if (!isFinalResponse(event)) {
-        continue;
-      }
-
-      const structuredOutput = event.actions.stateDelta.note_generation_output;
-      if (structuredOutput) {
-        return JSON.stringify(structuredOutput);
-      }
-
-      const content = stringifyContent(event).trim();
-      if (content) {
-        finalResponseText = content;
-      }
-    }
-
-    if (!finalResponseText) {
-      throw new BadGatewayError("Note generation agent did not return a final response.");
-    }
-
-    return finalResponseText;
+    return note;
   }
 
   private async runNoteSummarizationAgent(
@@ -316,46 +297,6 @@ export class NoteService {
   }
 }
 
-function extractErrorMessage(payload: unknown): string | null {
-  if (typeof payload !== "object" || payload === null) {
-    return null;
-  }
-
-  const directMessage = (payload as { message?: unknown }).message;
-  if (typeof directMessage === "string" && directMessage.trim()) {
-    return directMessage;
-  }
-
-  const detail = (payload as { detail?: unknown }).detail;
-  if (typeof detail === "string" && detail.trim()) {
-    return detail;
-  }
-
-  const nestedMessage = (payload as { error?: { message?: unknown } }).error?.message;
-  if (typeof nestedMessage === "string" && nestedMessage.trim()) {
-    return nestedMessage;
-  }
-
-  const title = (payload as { title?: unknown }).title;
-  if (typeof title === "string" && title.trim()) {
-    return title;
-  }
-
-  const validationErrors = (payload as { errors?: unknown }).errors;
-  if (typeof validationErrors === "object" && validationErrors !== null) {
-    for (const value of Object.values(validationErrors)) {
-      if (Array.isArray(value)) {
-        const firstMessage = value.find((item) => typeof item === "string" && item.trim());
-        if (typeof firstMessage === "string") {
-          return firstMessage;
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
 function tryParseJson(value: string): unknown | null {
   try {
     return JSON.parse(value) as unknown;
@@ -377,15 +318,15 @@ function buildNoteGenerationPrompt(documentName: string): string {
   const generatedNoteName = documentName.trim();
 
   return [
-    "Generate one grounded study note from this PDF.",
+    "Generate one grounded study note from this extracted source material from a PDF.",
     'Return only JSON matching this shape: {"name":"...","noteContent":"..."}.',
     `Use this exact note name: "${generatedNoteName}".`,
     "The title must be concise and minimal.",
     "Do not add prefixes, suffixes, labels, or extra descriptive words to the title.",
-    "Use only information supported by the PDF.",
+    "Use only information supported by the extracted source material.",
     "Do not invent facts, examples, dates, formulas, or citations.",
     "Write noteContent as clean study text suitable for review.",
-    "Prefer short sections, concise explanations, and faithful terminology from the PDF.",
+    "Prefer short sections, concise explanations, and faithful terminology from the source material.",
   ].join("\n");
 }
 

@@ -1,19 +1,20 @@
 import { InMemoryRunner, LlmAgent } from "@google/adk";
 
-import type { AppDependencies } from "../../bootstrap/dependencies";
 import { env } from "../../config/env";
 import { studyLoadCourseParsingOutputSchema } from "../../features/studyloads/studyload.dto";
-import { buildStudyLoadTools } from "../../features/studyloads/studyload.tools";
-import type { AgentDefinition } from "../../shared/types/agent-definition";
+import { buildStudyLoadAgentTools } from "../../features/studyloads/studyload.tools";
+import { StudyLoadService } from "../../features/studyloads/studyload.service";
+import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
 import { studyloadPdfParsingAgentInstructions, studyloadsAgentInstructions } from "./instructions";
 
-export function createStudyloadsAgent(dependencies: AppDependencies): AgentDefinition {
-  return {
+export function createStudyloadsAgent(studyLoadService: StudyLoadService, authorizationHeader: string): LlmAgent {
+  return new LlmAgent({
     name: "studyloads_agent",
     description: "Specialist agent for studyload PDF parsing and studyload-course synchronization workflows.",
-    instructions: studyloadsAgentInstructions,
-    tools: buildStudyLoadTools(dependencies.studyLoadService),
-  };
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: studyloadsAgentInstructions,
+    tools: toAdkFunctionTools(buildStudyLoadAgentTools(studyLoadService, authorizationHeader)),
+  });
 }
 
 export function createStudyLoadParsingAgent(): LlmAgent {

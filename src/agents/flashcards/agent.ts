@@ -1,19 +1,25 @@
 import { InMemoryRunner, LlmAgent } from "@google/adk";
 
-import type { AppDependencies } from "../../bootstrap/dependencies";
 import { env } from "../../config/env";
-import { flashcardGenerationOutputSchema } from "../../features/flashcards/flashcard.dto";
-import { buildFlashcardTools } from "../../features/flashcards/flashcard.tools";
-import type { AgentDefinition } from "../../shared/types/agent-definition";
-import { flashcardsAgentInstructions, flashcardsGenerationAgentInstructions } from "./instructions";
+import { flashcardEvaluationOutputSchema, flashcardGenerationOutputSchema, performanceSummaryAiOutputSchema } from "../../features/flashcards/flashcard.dto";
+import { buildFlashcardAgentTools } from "../../features/flashcards/flashcard.tools";
+import { FlashcardService } from "../../features/flashcards/flashcard.service";
+import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
+import {
+  flashcardAnalyticsGenerationAgentInstructions,
+  flashcardsAgentInstructions,
+  flashcardsGenerationAgentInstructions,
+  performanceSummaryGenerationAgentInstructions,
+} from "./instructions";
 
-export function createFlashcardsAgent(dependencies: AppDependencies): AgentDefinition {
-  return {
+export function createFlashcardsAgent(flashcardService: FlashcardService, authorizationHeader: string): LlmAgent {
+  return new LlmAgent({
     name: "flashcards_agent",
-    description: "Specialist agent for note-based flashcard generation workflows.",
-    instructions: flashcardsAgentInstructions,
-    tools: buildFlashcardTools(dependencies.flashcardService),
-  };
+    description: "Specialist agent for flashcard generation and flashcard analytics workflows.",
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: flashcardsAgentInstructions,
+    tools: toAdkFunctionTools(buildFlashcardAgentTools(flashcardService, authorizationHeader)),
+  });
 }
 
 export function createFlashcardsGenerationAgent(): LlmAgent {
@@ -34,5 +40,47 @@ export function createFlashcardsGenerationRunner(): InMemoryRunner {
   return new InMemoryRunner({
     appName: env.GOOGLE_ADK_APP_NAME,
     agent: createFlashcardsGenerationAgent(),
+  });
+}
+
+export function createFlashcardAnalyticsAgent(): LlmAgent {
+  return new LlmAgent({
+    name: "flashcard_analytics_agent",
+    description: "Evaluates one flashcard answer and returns a semantic verdict, analytics snapshot, and frontend review payload.",
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: flashcardAnalyticsGenerationAgentInstructions,
+    outputSchema: flashcardEvaluationOutputSchema,
+    outputKey: "flashcard_evaluation_output",
+    generateContentConfig: {
+      temperature: 0.1,
+    },
+  });
+}
+
+export function createFlashcardAnalyticsRunner(): InMemoryRunner {
+  return new InMemoryRunner({
+    appName: env.GOOGLE_ADK_APP_NAME,
+    agent: createFlashcardAnalyticsAgent(),
+  });
+}
+
+export function createPerformanceSummaryAgent(): LlmAgent {
+  return new LlmAgent({
+    name: "performance_summary_agent",
+    description: "Evaluates a persisted course or overall performance summary and returns AI insight text.",
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: performanceSummaryGenerationAgentInstructions,
+    outputSchema: performanceSummaryAiOutputSchema,
+    outputKey: "performance_summary_output",
+    generateContentConfig: {
+      temperature: 0.1,
+    },
+  });
+}
+
+export function createPerformanceSummaryRunner(): InMemoryRunner {
+  return new InMemoryRunner({
+    appName: env.GOOGLE_ADK_APP_NAME,
+    agent: createPerformanceSummaryAgent(),
   });
 }

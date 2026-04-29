@@ -175,34 +175,44 @@ Mirror the feature structure under tests so the test suite stays easy to navigat
 
 ## Execution Flow
 
+### REST Feature Path
+
 ```text
 user request
-  -> root ADK agent
-  -> selected tool
-  -> Zod input validation
+  -> Express route
+  -> feature controller
+  -> Zod request validation
   -> feature service
-  -> feature repository
-  -> Drizzle database client
-  -> PostgreSQL
-  -> repository maps row to domain entity
+  -> upstream EducAIte API or repository
+  -> bounded ADK runner when AI is required
   -> response schema validation
-  -> agent response
+  -> HTTP response
 ```
 
-### Concrete Path In This Scaffold
+### Agent Orchestrator Path
 
 ```text
 User request
-  -> src/agents/root/agent.ts
-  -> src/features/users/user.tools.ts
-  -> src/features/users/user.dto.ts
-  -> src/features/users/user.service.ts
-  -> src/features/users/user.repository.ts
-  -> src/infrastructure/database/client.ts
-  -> src/infrastructure/database/schema/user.schema.ts
-  -> PostgreSQL
-  -> src/features/users/user.response.ts
-  -> agent output
+  -> POST /api/agent/messages
+  -> agent controller
+  -> agent service
+  -> root ADK agent runner
+  -> specialist AgentTool: notes, flashcards, or studyloads
+  -> service-backed FunctionTool
+  -> feature service
+  -> HTTP response
+```
+
+### Structured Agent Task Path
+
+```text
+.NET API request
+  -> POST /api/agent/tasks
+  -> intent + payload validation
+  -> deterministic task handler
+  -> notes, flashcards, or studyloads service
+  -> typed task result
+  -> HTTP response
 ```
 
 ## Opinionated Rules
@@ -212,10 +222,11 @@ User request
 - Keep Zod DTOs and response schemas in the feature folder. Validation belongs close to the use case boundary.
 - Keep agent instructions separate from agent construction. Prompt edits should not force unrelated code edits.
 - Keep tool registration inside the feature that owns the capability.
+- Use `/api/agent/tasks` for app workflows that already have typed request data. Keep `/api/agent/messages` for chat-style interactions.
 - Keep `src/index.ts` thin. It should only assemble dependencies and start the runtime.
 
 ## Notes From Current Docs
 
-- ADK TypeScript supports a root agent with sub-agents, which maps well to `src/agents/root` plus one folder per specialist agent.
+- ADK TypeScript supports a root agent with specialist agents wrapped as tools, which maps well to `src/agents/root` plus one folder per specialist agent.
 - Drizzle recommends a clear split between schema files, database client setup, and generated migrations.
 - Zod works best when parsing untrusted input at the edge and inferring types from those schemas through the service boundary.

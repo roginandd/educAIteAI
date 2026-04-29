@@ -1,1 +1,0 @@
-Drizzle metadata lives here.

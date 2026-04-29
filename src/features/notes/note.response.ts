@@ -17,7 +17,7 @@ export const signedUrlResponseSchema = z.object({
 
 export const generateNoteFromDocumentResponseSchema = z.object({
   documentSqid: z.string().trim().min(1),
-  source: z.literal("generated"),
+  source: z.enum(["generated", "existing"]),
   note: noteApiResponseSchema,
 });
 

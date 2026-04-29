@@ -80,3 +80,23 @@ export function buildStudyLoadTools(studyLoadService: StudyLoadService): ToolDef
     },
   }];
 }
+
+export function buildStudyLoadAgentTools(studyLoadService: StudyLoadService, authorizationHeader: string): ToolDefinition[] {
+  return [{
+    name: "parse_and_apply_studyload_pdf",
+    description: "Loads the persisted studyload, generates a signed URL for its PDF, parses the PDF with AI, and applies the normalized course rows to the target study load.",
+    inputSchema: parseAndApplyStudyLoadPdfInputSchema,
+    async execute(input) {
+      const parsedInput = parseAndApplyStudyLoadPdfInputSchema.parse(input);
+      return studyLoadService.parseAndApplyStudyLoadPdf(parsedInput, authorizationHeader);
+    },
+  }, {
+    name: "apply_parsed_studyload_courses",
+    description: "Persists parsed studyload course rows through the EducAIte StudyLoad API and automatically syncs courses and student-course enrollments.",
+    inputSchema: applyParsedStudyLoadCoursesInputSchema,
+    async execute(input) {
+      const parsedInput = applyParsedStudyLoadCoursesInputSchema.parse(input);
+      return studyLoadService.applyParsedCourses(parsedInput, authorizationHeader);
+    },
+  }];
+}

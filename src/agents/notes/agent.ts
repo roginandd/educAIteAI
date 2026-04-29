@@ -1,19 +1,20 @@
 import { InMemoryRunner, LlmAgent } from "@google/adk";
 
-import type { AppDependencies } from "../../bootstrap/dependencies";
 import { env } from "../../config/env";
 import { noteGenerationOutputSchema, summarizeNoteOutputSchema } from "../../features/notes/note.dto";
-import { buildNoteTools } from "../../features/notes/note.tools";
-import type { AgentDefinition } from "../../shared/types/agent-definition";
+import { buildNoteAgentTools } from "../../features/notes/note.tools";
+import { NoteService } from "../../features/notes/note.service";
+import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
 import { noteGenerationAgentInstructions, notesAgentInstructions, noteSummarizationAgentInstructions } from "./instructions";
 
-export function createNotesAgent(dependencies: AppDependencies): AgentDefinition {
-  return {
+export function createNotesAgent(noteService: NoteService, authorizationHeader: string): LlmAgent {
+  return new LlmAgent({
     name: "notes_agent",
     description: "Specialist agent for document-to-note generation workflows.",
-    instructions: notesAgentInstructions,
-    tools: buildNoteTools(dependencies.noteService),
-  };
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: notesAgentInstructions,
+    tools: toAdkFunctionTools(buildNoteAgentTools(noteService, authorizationHeader)),
+  });
 }
 
 export function createNoteGenerationAgent(): LlmAgent {
