@@ -2,7 +2,20 @@ import { createFlashcardAnalyticsRunner, createFlashcardsGenerationRunner, creat
 import { createCertificateParsingRunner, createCertificateSuggestionRunner } from "../agents/certificates/agent";
 import { createNotesGenerationRunner, createNotesSummarizationRunner } from "../agents/notes/agent";
 import { createPdfExtractionRunner } from "../agents/pdf/agent";
-import { createResumeAnalysisRunner, createResumeJobProfileRunner, createResumeTailoringRunner } from "../agents/resumes/agent";
+import {
+  createResumeAnalysisRunner,
+  createResumeCertificateSuggestionRunner,
+  createResumeJobProfileRunner,
+  createResumeTailoringRunner,
+} from "../agents/resumes/agent";
+import {
+  createSmartQuizAnswerScoringRunner,
+  createSmartQuizCodeFeedbackRunner,
+  createSmartQuizContextClassifierRunner,
+  createSmartQuizFlowchartEvaluatorRunner,
+  createSmartQuizItemGeneratorRunner,
+  createSmartQuizRetryVariantRunner,
+} from "../agents/smart-quiz/agent";
 import { createStudyLoadParsingRunner } from "../agents/studyloads/agent";
 import { AgentService } from "../features/agent/agent.service";
 import { CertificateService } from "../features/certificates/certificate.service";
@@ -11,6 +24,11 @@ import { GeneratedNoteArtifactRepository } from "../features/notes/generated-not
 import { NoteService } from "../features/notes/note.service";
 import { OnboardingService } from "../features/onboarding/onboarding.service";
 import { ResumeService } from "../features/resumes/resume.service";
+import {
+  DisabledCodeExecutionSupervisor,
+  Judge0CodeExecutionSupervisor,
+} from "../features/smart-quiz/code-execution-supervisor";
+import { SmartQuizService } from "../features/smart-quiz/smart-quiz.service";
 import { StudentPerformanceService } from "../features/student-performance/student-performance.service";
 import { StudyLoadService } from "../features/studyloads/studyload.service";
 import { env } from "../config/env";
@@ -28,6 +46,7 @@ export interface AppDependencies {
   noteService: NoteService;
   onboardingService: OnboardingService;
   resumeService: ResumeService;
+  smartQuizService: SmartQuizService;
   studentPerformanceService: StudentPerformanceService;
   studyLoadService: StudyLoadService;
 }
@@ -44,6 +63,13 @@ export function createDependencies(): AppDependencies {
   );
   const generatedNoteArtifactRepository = new GeneratedNoteArtifactRepository();
   const publicWebSearchService = new DuckDuckGoPublicWebSearchService();
+  const codeExecutionSupervisor = env.JUDGE0_API_BASE_URL
+    ? new Judge0CodeExecutionSupervisor({
+        baseUrl: env.JUDGE0_API_BASE_URL,
+        apiKey: env.JUDGE0_API_KEY,
+        apiKeyHeader: env.JUDGE0_API_KEY_HEADER,
+      })
+    : new DisabledCodeExecutionSupervisor();
   const certificateService = new CertificateService(
     createCertificateParsingRunner(),
     createCertificateSuggestionRunner(),
@@ -54,6 +80,7 @@ export function createDependencies(): AppDependencies {
     createFlashcardsGenerationRunner(),
     createFlashcardAnalyticsRunner(),
     upstreamHttpClient,
+    codeExecutionSupervisor,
   );
   const noteService = new NoteService(
     createNotesGenerationRunner(),
@@ -66,11 +93,24 @@ export function createDependencies(): AppDependencies {
   const studentPerformanceService = new StudentPerformanceService(createPerformanceSummaryRunner());
   const resumeService = new ResumeService(
     createResumeAnalysisRunner(),
+    createResumeCertificateSuggestionRunner(),
     createResumeJobProfileRunner(),
     createResumeTailoringRunner(),
     upstreamHttpClient,
     structuredAgentRunnerService,
     publicWebSearchService,
+  );
+  const smartQuizService = new SmartQuizService(
+    createSmartQuizContextClassifierRunner(),
+    createSmartQuizItemGeneratorRunner(),
+    createSmartQuizAnswerScoringRunner(),
+    createSmartQuizCodeFeedbackRunner(),
+    createSmartQuizFlowchartEvaluatorRunner(),
+    createSmartQuizRetryVariantRunner(),
+    createPdfExtractionRunner(),
+    structuredAgentRunnerService,
+    codeExecutionSupervisor,
+    pdfProcessingService,
   );
   const studyLoadService = new StudyLoadService(
     createStudyLoadParsingRunner(),
@@ -93,6 +133,7 @@ export function createDependencies(): AppDependencies {
     noteService,
     onboardingService,
     resumeService,
+    smartQuizService,
     studentPerformanceService,
     studyLoadService,
   };

@@ -8,6 +8,7 @@ import { createFlashcardRouter } from "../features/flashcards/flashcard.routes";
 import { createNoteRouter } from "../features/notes/note.routes";
 import { createOnboardingRouter } from "../features/onboarding/onboarding.routes";
 import { createResumeRouter } from "../features/resumes/resume.routes";
+import { createSmartQuizRouter } from "../features/smart-quiz/smart-quiz.routes";
 import { createStudentPerformanceRouter } from "../features/student-performance/student-performance.routes";
 import { createStudyLoadRouter } from "../features/studyloads/studyload.routes";
 import { AppError } from "../shared/errors/app-error";
@@ -48,6 +49,7 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/api/agent", createAgentRouter(dependencies.agentService));
   app.use("/api/onboarding", createOnboardingRouter(dependencies.onboardingService));
   app.use("/api/resumes", createResumeRouter(dependencies.resumeService));
+  app.use("/api/smart-quiz", createSmartQuizRouter(dependencies.smartQuizService));
   app.use("/internal/adk/certificates", createCertificateRouter(dependencies.certificateService));
   app.use("/internal/student-performance", createStudentPerformanceRouter(dependencies.studentPerformanceService));
   app.use("/api/notes", createNoteRouter(dependencies.noteService));

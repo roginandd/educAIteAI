@@ -7,6 +7,7 @@ export function createFlashcardRouter(flashcardService: FlashcardService): Route
   const router = Router();
   const flashcardController = new FlashcardController(flashcardService);
 
+  router.post("/learn/sessions/start-flow", flashcardController.getLearnSessionStartFlow);
   router.post("/learn/sessions", flashcardController.startLearnSession);
   router.get("/learn/sessions/active", flashcardController.getActiveLearnSession);
   router.post("/learn/sessions/:sessionSqid/resume", flashcardController.resumeLearnSession);

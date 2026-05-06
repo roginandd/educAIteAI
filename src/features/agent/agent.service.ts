@@ -84,10 +84,20 @@ export class AgentService {
           intent: parsedInput.intent,
           result: await this.dependencies.flashcardService.generateFromNote(parsedInput.payload, authHeader),
         });
+      case "generate_flashcards_preview":
+        return agentTaskResponseSchema.parse({
+          intent: parsedInput.intent,
+          result: await this.dependencies.flashcardService.previewGenerateFromNote(parsedInput.payload, authHeader),
+        });
       case "submit_and_analyze_flashcard_answer":
         return agentTaskResponseSchema.parse({
           intent: parsedInput.intent,
           result: await this.dependencies.flashcardService.submitAndAnalyze(parsedInput.payload, authHeader),
+        });
+      case "evaluate_flashcard_answer":
+        return agentTaskResponseSchema.parse({
+          intent: parsedInput.intent,
+          result: await this.dependencies.flashcardService.evaluateAnswer(parsedInput.payload, authHeader),
         });
       case "submit_flashcard_learn_session_answer":
         return agentTaskResponseSchema.parse({
@@ -113,6 +123,11 @@ export class AgentService {
         return agentTaskResponseSchema.parse({
           intent: parsedInput.intent,
           result: await this.dependencies.resumeService.generateStudentCareerHint(parsedInput.payload, authHeader),
+        });
+      case "suggest_resume_certificates":
+        return agentTaskResponseSchema.parse({
+          intent: parsedInput.intent,
+          result: await this.dependencies.resumeService.suggestResumeCertificates(parsedInput.payload, authHeader),
         });
       case "search_resume_job_suggestions":
         return agentTaskResponseSchema.parse({

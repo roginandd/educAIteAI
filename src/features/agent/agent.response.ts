@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import {
+  evaluateFlashcardAnswerResponseSchema,
+  generateFlashcardsPreviewResponseSchema,
   generateFlashcardsFromNoteResponseSchema,
   submitAndAnalyzeFlashcardResponseSchema,
   submitFlashcardLearnAnswerResponseSchema,
@@ -9,6 +11,7 @@ import { generateNoteFromDocumentResponseSchema, summarizeNoteResponseSchema } f
 import {
   analyzeResumeWithRelationsResponseSchema,
   companyRecommendationSearchResponseSchema,
+  resumeCertificateSuggestionsResponseSchema,
   studentCareerHintResponseSchema,
   studentJobTargetSuggestionsResponseSchema,
   tailorResumeForJobResponseSchema,
@@ -33,8 +36,16 @@ export const agentTaskResponseSchema = z.discriminatedUnion("intent", [
     result: generateFlashcardsFromNoteResponseSchema,
   }),
   z.object({
+    intent: z.literal("generate_flashcards_preview"),
+    result: generateFlashcardsPreviewResponseSchema,
+  }),
+  z.object({
     intent: z.literal("submit_and_analyze_flashcard_answer"),
     result: submitAndAnalyzeFlashcardResponseSchema,
+  }),
+  z.object({
+    intent: z.literal("evaluate_flashcard_answer"),
+    result: evaluateFlashcardAnswerResponseSchema,
   }),
   z.object({
     intent: z.literal("submit_flashcard_learn_session_answer"),
@@ -55,6 +66,10 @@ export const agentTaskResponseSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("generate_student_career_hint"),
     result: studentCareerHintResponseSchema,
+  }),
+  z.object({
+    intent: z.literal("suggest_resume_certificates"),
+    result: resumeCertificateSuggestionsResponseSchema,
   }),
   z.object({
     intent: z.literal("search_resume_job_suggestions"),

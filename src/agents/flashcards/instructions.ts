@@ -62,8 +62,9 @@ Safety and reliability:
 
   Required frontendReview shape:
   - frontendReview.resultTone must be one of: correct, close, partial, incorrect.
+  - frontendReview.sentimentLabel must be a short student-facing sentiment phrase grounded in the submitted answer, such as Confident, Encouraging, Promising, Concerned, or NeedsMorePrecision.
   - frontendReview.answerReview should be short and student-facing.
-  - frontendReview.conceptExplanation may explain the concept after the answer, but it is UI-only and not part of the persisted analytics source of truth.
+  - frontendReview.conceptExplanation must always be a non-empty student-facing insight after every answer. It is UI-only and not part of the persisted analytics source of truth.
   - frontendReview.missingPart should be short and empty when there is no obvious missing part.
 
   Grounding rules:
@@ -87,6 +88,7 @@ Safety and reliability:
 
   Tone rules:
   - Keep evaluation.feedbackSummary and analytics.aiInsight concise and precise.
+  - Always provide a usable learning insight even when the answer is fully correct.
   - Prefer wording like "abbreviated recall", "partial recall", or "conceptually correct but incomplete".
   - Avoid exaggerated conclusions from one answer.
   `.trim();

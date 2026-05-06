@@ -1,11 +1,84 @@
 import { z } from "zod";
 
+export const flashcardItemTypeSchema = z.enum([
+  "Flashcard",
+  "Conceptual",
+  "CodeReading",
+  "Debugging",
+  "Algorithm",
+  "OutputPrediction",
+  "MultipleChoice",
+  "ShortAnswer",
+]);
+
+export const cognitiveSkillSchema = z.enum(["Recall", "Understand", "Apply", "Analyze", "Debug", "Design"]);
+
+function normalizeCognitiveSkill(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case "recall":
+    case "remember":
+    case "memorize":
+      return "Recall";
+    case "understand":
+    case "understanding":
+    case "comprehend":
+    case "comprehension":
+    case "explain":
+      return "Understand";
+    case "apply":
+    case "application":
+    case "use":
+    case "implement":
+      return "Apply";
+    case "analyze":
+    case "analysis":
+      return "Analyze";
+    case "debug":
+    case "debugging":
+    case "troubleshoot":
+    case "troubleshooting":
+      return "Debug";
+    case "design":
+    case "planning":
+    case "architect":
+    case "architecture":
+      return "Design";
+    default:
+      return value;
+  }
+}
+
+const normalizedCognitiveSkillSchema = z.preprocess(normalizeCognitiveSkill, cognitiveSkillSchema);
+
+export const learningDomainSchema = z.enum([
+  "Unknown",
+  "Programming",
+  "Database",
+  "Math",
+  "Writing",
+  "Business",
+  "GeneralEducation",
+]);
+
 export const createBulkFlashcardItemSchema = z.object({
   question: z.string().trim().min(1).max(1000),
   answer: z.string().trim().min(1).max(2000),
   conceptExplanation: z.string().trim().max(4000).optional().default(""),
   answeringGuidance: z.string().trim().max(2000).optional().default(""),
   acceptedAnswerAliases: z.array(z.string().trim().min(1).max(500)).optional().default([]),
+  itemType: flashcardItemTypeSchema.optional().default("Flashcard"),
+  difficulty: z.coerce.number().int().min(0).max(100).optional().default(50),
+  cognitiveSkill: normalizedCognitiveSkillSchema.optional().default("Recall"),
+  learningDomain: learningDomainSchema.optional().default("Unknown"),
+  technicalLanguage: z.string().trim().max(80).optional().default(""),
+  tagsJson: z.array(z.string()).optional().default([]),
+  rubricJson: z.record(z.string(), z.unknown()).optional().default({}),
+  validationConfigJson: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
 export const createBulkFlashcardsRequestSchema = z.object({
@@ -25,7 +98,14 @@ export const noteApiResponseSchema = z.object({
 
 export const generateFlashcardsFromNoteInputSchema = z.object({
   noteSqid: z.string().trim().min(1),
-  flashcardCount: z.coerce.number().int().min(1).max(10).default(5),
+  flashcardCount: z.coerce.number().int().min(1).max(20).default(5),
+  noteTitle: z.string().trim().min(1).max(200).optional(),
+  noteContent: z.string().trim().min(1).max(50000).optional(),
+  itemTypes: z.array(flashcardItemTypeSchema).optional().default([]),
+  learningDomain: learningDomainSchema.optional().default("Unknown"),
+  cognitiveSkill: normalizedCognitiveSkillSchema.optional(),
+  technicalLanguage: z.string().trim().max(80).optional(),
+  programContext: z.string().trim().max(4000).optional(),
 });
 
 export const generateFlashcardsFromNoteParamsSchema = z.object({
@@ -33,12 +113,35 @@ export const generateFlashcardsFromNoteParamsSchema = z.object({
 });
 
 export const generateFlashcardsFromNoteBodySchema = z.object({
-  flashcardCount: z.coerce.number().int().min(1).max(10).default(5),
+  flashcardCount: z.coerce.number().int().min(1).max(20).default(5),
 });
 
 export const submitFlashcardAttemptRequestSchema = z.object({
-  answer: z.string().trim().min(1).max(4000),
+  answer: z.string().trim().max(20000).optional(),
   responseTimeMs: z.coerce.number().int().min(0).default(0),
+  itemType: flashcardItemTypeSchema.optional(),
+  question: z.string().trim().min(1).max(4000).optional(),
+  expectedAnswer: z.string().trim().min(1).max(4000).optional(),
+  conceptExplanation: z.string().trim().max(4000).optional(),
+  answeringGuidance: z.string().trim().max(2000).optional(),
+  acceptedAnswerAliases: z.array(z.string().trim().min(1).max(500)).optional().default([]),
+  cognitiveSkill: normalizedCognitiveSkillSchema.optional(),
+  learningDomain: learningDomainSchema.optional(),
+  technicalLanguage: z.string().trim().max(80).optional(),
+  rubricJson: z.string().trim().max(12000).optional(),
+  validationConfigJson: z.string().trim().max(12000).optional(),
+  language: z.enum(["cpp", "csharp", "java", "python", "javascript", "sql"]).optional(),
+  runtimeVersion: z.string().trim().min(1).optional(),
+  starterCode: z.string().max(20000).optional().default(""),
+  studentCode: z.string().trim().max(20000).optional(),
+}).superRefine((value, context) => {
+  if (!value.answer?.trim() && !value.studentCode?.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Either answer or studentCode is required.",
+      path: ["answer"],
+    });
+  }
 });
 
 export const submitAndAnalyzeFlashcardParamsSchema = z.object({
@@ -58,6 +161,7 @@ export const startFlashcardLearnSessionBodySchema = z.object({
   studentCourseSqid: z.string().trim().min(1).optional(),
   documentSqid: z.string().trim().min(1).optional(),
   take: z.coerce.number().int().min(1).max(100).default(30),
+  startMode: z.enum(["auto", "new"]).optional().default("auto"),
 });
 
 export const startFlashcardLearnSessionInputSchema = z.object({
@@ -65,6 +169,7 @@ export const startFlashcardLearnSessionInputSchema = z.object({
   studentCourseSqid: z.string().trim().min(1).optional(),
   documentSqid: z.string().trim().min(1).optional(),
   take: z.coerce.number().int().min(1).max(100).default(30),
+  startMode: z.enum(["auto", "new"]).optional().default("auto"),
 });
 
 export const getActiveFlashcardLearnSessionQuerySchema = z.object({
@@ -85,8 +190,31 @@ export const flashcardLearnSessionParamsSchema = z.object({
 
 export const submitFlashcardLearnAnswerBodySchema = z.object({
   sessionItemSqid: z.string().trim().min(1),
-  answer: z.string().trim().min(1).max(4000),
+  answer: z.string().trim().max(20000).optional(),
   responseTimeMs: z.coerce.number().int().min(0).default(0),
+  itemType: flashcardItemTypeSchema.optional(),
+  question: z.string().trim().min(1).max(4000).optional(),
+  expectedAnswer: z.string().trim().min(1).max(4000).optional(),
+  conceptExplanation: z.string().trim().max(4000).optional(),
+  answeringGuidance: z.string().trim().max(2000).optional(),
+  acceptedAnswerAliases: z.array(z.string().trim().min(1).max(500)).optional().default([]),
+  cognitiveSkill: normalizedCognitiveSkillSchema.optional(),
+  learningDomain: learningDomainSchema.optional(),
+  technicalLanguage: z.string().trim().max(80).optional(),
+  rubricJson: z.string().trim().max(12000).optional(),
+  validationConfigJson: z.string().trim().max(12000).optional(),
+  language: z.enum(["cpp", "csharp", "java", "python", "javascript", "sql"]).optional(),
+  runtimeVersion: z.string().trim().min(1).optional(),
+  starterCode: z.string().max(20000).optional().default(""),
+  studentCode: z.string().trim().max(20000).optional(),
+}).superRefine((value, context) => {
+  if (!value.answer?.trim() && !value.studentCode?.trim()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Either answer or studentCode is required.",
+      path: ["answer"],
+    });
+  }
 });
 
 export const submitFlashcardLearnAnswerInputSchema = submitFlashcardLearnAnswerBodySchema.extend({
@@ -135,9 +263,25 @@ export const flashcardAnalyticsOutputSchema = z.object({
 
 export const flashcardFrontendReviewOutputSchema = z.object({
   resultTone: z.enum(["correct", "close", "partial", "incorrect"]),
+  sentimentLabel: z.string().trim().min(1).max(80),
+  verdict: z.string().trim().max(80).optional().default(""),
+  qualityScore: z.number().finite().min(0).max(1).optional(),
+  isCorrect: z.boolean().optional(),
   answerReview: z.string().trim().min(1).max(2000),
   conceptExplanation: z.string().trim().max(4000).default(""),
   missingPart: z.string().trim().max(1000).default(""),
+  misconception: z.string().trim().max(1000).optional().default(""),
+  rubricFeedback: z.array(z.object({
+    criterion: z.string().trim().min(1).max(200),
+    score: z.number().finite().min(0).max(1).optional(),
+    feedback: z.string().trim().max(1000).default(""),
+  })).optional().default([]),
+  technicalDiagnostics: z.object({
+    language: z.string().trim().max(80).default(""),
+    expectedBehavior: z.string().trim().max(1000).default(""),
+    actualBehavior: z.string().trim().max(1000).default(""),
+    issues: z.array(z.string().trim().min(1).max(500)).default([]),
+  }).nullable().optional(),
 });
 
 export const flashcardEvaluationOutputSchema = z.object({
@@ -203,3 +347,4 @@ export type PerformanceSummaryAiOutput = z.output<typeof performanceSummaryAiOut
 export type UpsertPerformanceSummaryAiRequest = z.output<typeof upsertPerformanceSummaryAiRequestSchema>;
 export type SubmitEvaluatedFlashcardAttemptRequest = z.output<typeof submitEvaluatedFlashcardAttemptRequestSchema>;
 export type SubmitEvaluatedFlashcardSessionAnswerRequest = z.output<typeof submitEvaluatedFlashcardSessionAnswerRequestSchema>;
+

@@ -12,6 +12,8 @@ import {
   companyRecommendationSearchInputSchema,
   type CompanyRecommendationSearchInput,
   resumeAnalysisOutputSchema,
+  resumeCertificateSuggestionsInputSchema,
+  resumeCertificateSuggestionsOutputSchema,
   resumeJobProfileOutputSchema,
   resumeTailoringOutputSchema,
   studentCareerHintInputSchema,
@@ -20,6 +22,8 @@ import {
   type StudentJobTargetSuggestionsInput,
   tailorResumeForJobInputSchema,
   type AnalyzeResumeWithRelationsInput,
+  type ResumeCertificateSuggestionsInput,
+  type ResumeCertificateSuggestionsOutput,
   type ResumeAnalysisOutput,
   type ResumeJobProfileOutput,
   type ResumeTailoringOutput,
@@ -30,12 +34,14 @@ import {
 import {
   analyzeResumeWithRelationsResponseSchema,
   companyRecommendationSearchResponseSchema,
+  resumeCertificateSuggestionsResponseSchema,
   resumeWithRelationsResponseSchema,
   studentCareerHintResponseSchema,
   studentJobTargetSuggestionsResponseSchema,
   tailorResumeForJobResponseSchema,
   type AnalyzeResumeWithRelationsResponse,
   type CompanyRecommendationSearchResponse,
+  type ResumeCertificateSuggestionsResponse,
   type ResumeWithRelationsResponse,
   type StudentCareerHintResponse,
   type StudentJobTargetSuggestionsResponse,
@@ -45,6 +51,7 @@ import {
 export class ResumeService {
   constructor(
     private readonly analysisRunner: Runner,
+    private readonly certificateSuggestionRunner: Runner,
     private readonly jobProfileRunner: Runner,
     private readonly tailoringRunner: Runner,
     private readonly upstreamHttpClient: UpstreamHttpClient,
@@ -226,6 +233,22 @@ export class ResumeService {
     return studentCareerHintResponseSchema.parse({ hint });
   }
 
+  async suggestResumeCertificates(
+    input: ResumeCertificateSuggestionsInput,
+    authorizationHeader: string | undefined,
+  ): Promise<ResumeCertificateSuggestionsResponse> {
+    this.requireAuthorizationHeader(authorizationHeader);
+    const parsedInput = resumeCertificateSuggestionsInputSchema.parse(input);
+    const suggestions = await this.generateResumeCertificateSuggestions(parsedInput);
+
+    return resumeCertificateSuggestionsResponseSchema.parse({
+      ...suggestions,
+      resumeSqid: parsedInput.resumeSqid,
+      targetRole: parsedInput.targetRole,
+      totalCertificatesReviewed: parsedInput.certificates.length,
+    });
+  }
+
   async recommendResumeJobOpportunities(
     input: CompanyRecommendationSearchInput,
     authorizationHeader: string | undefined,
@@ -290,6 +313,25 @@ export class ResumeService {
       outputSchema: resumeJobProfileOutputSchema,
       invalidJsonMessage: "Resume job profiling agent returned invalid JSON.",
       noResponseMessage: "Resume job profiling agent did not return a final response.",
+    });
+  }
+
+  private async generateResumeCertificateSuggestions(
+    input: ResumeCertificateSuggestionsInput,
+  ): Promise<ResumeCertificateSuggestionsOutput> {
+    const message: Content = {
+      role: "user",
+      parts: [{ text: buildResumeCertificateSuggestionPrompt(input) }],
+    };
+
+    return this.structuredAgentRunnerService.runStructuredPrompt({
+      runner: this.certificateSuggestionRunner,
+      userId: `resume_service_certificate_suggestions_${input.resumeSqid}`,
+      message,
+      outputKey: "resume_certificate_suggestions_output",
+      outputSchema: resumeCertificateSuggestionsOutputSchema,
+      invalidJsonMessage: "Resume certificate suggestion agent returned invalid JSON.",
+      noResponseMessage: "Resume certificate suggestion agent did not return a final response.",
     });
   }
 
@@ -395,6 +437,26 @@ function buildResumeTailoringPrompt(
       ? ["", "Correct the following validation failures from the prior attempt:", ...priorViolations.map((item) => `- ${item}`)].join("\n")
       : undefined,
   ].filter((part): part is string => Boolean(part)).join("\n");
+}
+
+function buildResumeCertificateSuggestionPrompt(input: ResumeCertificateSuggestionsInput): string {
+  return [
+    "Review this student's saved resume context and existing certificates.",
+    "Handpick the certificates that are most relevant to the target role.",
+    "Return only JSON.",
+    'Return exactly this shape: {"resumeSqid":"...","targetRole":"...","totalCertificatesReviewed":0,"suggestions":[{"certificationSqid":"...","achievementName":"...","institution":"...","issuedDate":"...","schoolYear":"...","gradeOrScore":"...","description":"...","tags":["..."],"status":"...","relevanceScore":0,"matchReason":"...","recommendedUsage":"..."}]}',
+    "Rules:",
+    "- Use only the provided target role, experience summaries, leadership summaries, activity summaries, and certificate list.",
+    "- Do not invent experience, leadership, activities, certificate facts, institutions, grades, tags, or dates.",
+    "- Select only certificates from the provided list.",
+    "- Return at most maxResults suggestions and rank the strongest matches first.",
+    "- If a certificate is weakly related, omit it instead of forcing it into suggestions.",
+    "- matchReason must connect the certificate to the target role and the student's actual resume context.",
+    "- recommendedUsage must tell the student how to position that certificate in the resume or application.",
+    "",
+    "Certificate suggestion input:",
+    JSON.stringify(input),
+  ].join("\n");
 }
 
 function validateTailoringEvidence(

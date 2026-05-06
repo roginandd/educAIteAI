@@ -9,6 +9,7 @@ import { generateNoteFromDocumentInputSchema, summarizeNoteInputSchema } from ".
 import {
   analyzeResumeWithRelationsInputSchema,
   companyRecommendationSearchInputSchema,
+  resumeCertificateSuggestionsInputSchema,
   studentCareerHintInputSchema,
   studentJobTargetSuggestionsInputSchema,
   tailorResumeForJobInputSchema,
@@ -27,12 +28,15 @@ export const agentTaskIntentSchema = z.enum([
   "generate_note_from_document",
   "summarize_note",
   "generate_flashcards_from_note",
+  "generate_flashcards_preview",
   "submit_and_analyze_flashcard_answer",
+  "evaluate_flashcard_answer",
   "submit_flashcard_learn_session_answer",
   "analyze_resume_with_relations",
   "tailor_resume_for_job",
   "suggest_student_job_targets",
   "generate_student_career_hint",
+  "suggest_resume_certificates",
   "search_resume_job_suggestions",
   "recommend_resume_job_opportunities",
   "parse_and_apply_studyload_pdf",
@@ -53,8 +57,18 @@ const generateFlashcardsFromNoteTaskSchema = z.object({
   payload: generateFlashcardsFromNoteInputSchema,
 });
 
+const generateFlashcardsPreviewTaskSchema = z.object({
+  intent: z.literal("generate_flashcards_preview"),
+  payload: generateFlashcardsFromNoteInputSchema,
+});
+
 const submitAndAnalyzeFlashcardAnswerTaskSchema = z.object({
   intent: z.literal("submit_and_analyze_flashcard_answer"),
+  payload: submitAndAnalyzeFlashcardInputSchema,
+});
+
+const evaluateFlashcardAnswerTaskSchema = z.object({
+  intent: z.literal("evaluate_flashcard_answer"),
   payload: submitAndAnalyzeFlashcardInputSchema,
 });
 
@@ -83,6 +97,11 @@ const generateStudentCareerHintTaskSchema = z.object({
   payload: studentCareerHintInputSchema,
 });
 
+const suggestResumeCertificatesTaskSchema = z.object({
+  intent: z.literal("suggest_resume_certificates"),
+  payload: resumeCertificateSuggestionsInputSchema,
+});
+
 const searchResumeJobSuggestionsTaskSchema = z.object({
   intent: z.literal("search_resume_job_suggestions"),
   payload: companyRecommendationSearchInputSchema,
@@ -102,12 +121,15 @@ export const agentTaskBodySchema = z.discriminatedUnion("intent", [
   generateNoteFromDocumentTaskSchema,
   summarizeNoteTaskSchema,
   generateFlashcardsFromNoteTaskSchema,
+  generateFlashcardsPreviewTaskSchema,
   submitAndAnalyzeFlashcardAnswerTaskSchema,
+  evaluateFlashcardAnswerTaskSchema,
   submitFlashcardLearnSessionAnswerTaskSchema,
   analyzeResumeWithRelationsTaskSchema,
   tailorResumeForJobTaskSchema,
   suggestStudentJobTargetsTaskSchema,
   generateStudentCareerHintTaskSchema,
+  suggestResumeCertificatesTaskSchema,
   searchResumeJobSuggestionsTaskSchema,
   recommendResumeJobOpportunitiesTaskSchema,
   parseAndApplyStudyLoadPdfTaskSchema,

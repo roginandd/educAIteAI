@@ -2,6 +2,7 @@ import { InMemoryRunner, LlmAgent } from "@google/adk";
 
 import { env } from "../../config/env";
 import { pdfExtractionOutputSchema } from "../../shared/pdf/pdf-extraction.dto";
+import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
 import { pdfExtractionAgentInstructions } from "./instructions";
 
 export function createPdfExtractionAgent(): LlmAgent {
@@ -10,7 +11,7 @@ export function createPdfExtractionAgent(): LlmAgent {
     description: "Extracts faithful Markdown text from a single PDF document.",
     model: env.GOOGLE_GENAI_NOTE_PDF_MODEL,
     instruction: pdfExtractionAgentInstructions,
-    outputSchema: pdfExtractionOutputSchema,
+    outputSchema: toGeminiServingSchema(pdfExtractionOutputSchema),
     outputKey: "pdf_extraction_output",
     generateContentConfig: {
       temperature: 0,

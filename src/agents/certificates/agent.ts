@@ -9,6 +9,7 @@ import {
   certificateParsingAgentInstructions,
   certificateSuggestionAgentInstructions,
 } from "./instructions";
+import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
 
 export function createCertificateParsingAgent(): LlmAgent {
   return new LlmAgent({
@@ -16,7 +17,7 @@ export function createCertificateParsingAgent(): LlmAgent {
     description: "Extracts certificate fields, confidence, OCR text, and quality signals from a certificate image or PDF.",
     model: env.GOOGLE_GENAI_RESUME_MODEL,
     instruction: certificateParsingAgentInstructions,
-    outputSchema: certificateParsingAgentOutputSchema,
+    outputSchema: toGeminiServingSchema(certificateParsingAgentOutputSchema),
     outputKey: "certificate_parsing_output",
     generateContentConfig: {
       temperature: 0,
@@ -30,7 +31,7 @@ export function createCertificateSuggestionAgent(): LlmAgent {
     description: "Ranks existing certificates against a target job and explains include/exclude recommendations.",
     model: env.GOOGLE_GENAI_RESUME_MODEL,
     instruction: certificateSuggestionAgentInstructions,
-    outputSchema: certificateSuggestionAgentOutputSchema,
+    outputSchema: toGeminiServingSchema(certificateSuggestionAgentOutputSchema),
     outputKey: "certificate_suggestion_output",
     generateContentConfig: {
       temperature: 0.1,

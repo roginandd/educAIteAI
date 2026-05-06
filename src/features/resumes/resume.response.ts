@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   companyRecommendationSearchOutputSchema,
   resumeAnalysisOutputSchema,
+  resumeCertificateSuggestionsOutputSchema,
   resumeJobProfileOutputSchema,
   resumeTailoringOutputSchema,
   studentCareerHintOutputSchema,
@@ -116,9 +117,12 @@ export const studentCareerHintResponseSchema = studentCareerHintOutputSchema;
 
 export const companyRecommendationSearchResponseSchema = companyRecommendationSearchOutputSchema;
 
+export const resumeCertificateSuggestionsResponseSchema = resumeCertificateSuggestionsOutputSchema;
+
 export type ResumeWithRelationsResponse = z.output<typeof resumeWithRelationsResponseSchema>;
 export type AnalyzeResumeWithRelationsResponse = z.output<typeof analyzeResumeWithRelationsResponseSchema>;
 export type TailorResumeForJobResponse = z.output<typeof tailorResumeForJobResponseSchema>;
 export type StudentJobTargetSuggestionsResponse = z.output<typeof studentJobTargetSuggestionsResponseSchema>;
 export type StudentCareerHintResponse = z.output<typeof studentCareerHintResponseSchema>;
 export type CompanyRecommendationSearchResponse = z.output<typeof companyRecommendationSearchResponseSchema>;
+export type ResumeCertificateSuggestionsResponse = z.output<typeof resumeCertificateSuggestionsResponseSchema>;

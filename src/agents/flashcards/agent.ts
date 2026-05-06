@@ -4,6 +4,7 @@ import { env } from "../../config/env";
 import { flashcardEvaluationOutputSchema, flashcardGenerationOutputSchema, performanceSummaryAiOutputSchema } from "../../features/flashcards/flashcard.dto";
 import { buildFlashcardAgentTools } from "../../features/flashcards/flashcard.tools";
 import { FlashcardService } from "../../features/flashcards/flashcard.service";
+import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
 import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
 import {
   flashcardAnalyticsGenerationAgentInstructions,
@@ -28,7 +29,7 @@ export function createFlashcardsGenerationAgent(): LlmAgent {
     description: "Generates grounded flashcards from a single note.",
     model: env.GOOGLE_GENAI_MODEL,
     instruction: flashcardsGenerationAgentInstructions,
-    outputSchema: flashcardGenerationOutputSchema,
+    outputSchema: toGeminiServingSchema(flashcardGenerationOutputSchema),
     outputKey: "flashcards_generation_output",
     generateContentConfig: {
       temperature: 0.2,
@@ -49,7 +50,7 @@ export function createFlashcardAnalyticsAgent(): LlmAgent {
     description: "Evaluates one flashcard answer and returns a semantic verdict, analytics snapshot, and frontend review payload.",
     model: env.GOOGLE_GENAI_MODEL,
     instruction: flashcardAnalyticsGenerationAgentInstructions,
-    outputSchema: flashcardEvaluationOutputSchema,
+    outputSchema: toGeminiServingSchema(flashcardEvaluationOutputSchema),
     outputKey: "flashcard_evaluation_output",
     generateContentConfig: {
       temperature: 0.1,
@@ -70,7 +71,7 @@ export function createPerformanceSummaryAgent(): LlmAgent {
     description: "Evaluates a persisted course or overall performance summary and returns AI insight text.",
     model: env.GOOGLE_GENAI_MODEL,
     instruction: performanceSummaryGenerationAgentInstructions,
-    outputSchema: performanceSummaryAiOutputSchema,
+    outputSchema: toGeminiServingSchema(performanceSummaryAiOutputSchema),
     outputKey: "performance_summary_output",
     generateContentConfig: {
       temperature: 0.1,

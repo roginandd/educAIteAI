@@ -84,6 +84,28 @@ export const companyRecommendationSearchInputSchema = z.object({
   maxResults: z.number().int().min(1).max(20).default(10),
 });
 
+export const resumeCertificateSuggestionCandidateInputSchema = z.object({
+  certificationSqid: z.string().trim().min(1),
+  achievementName: z.string().trim().min(1).max(200),
+  institution: z.string().trim().min(1).max(200).nullable().optional(),
+  issuedDate: z.string().trim().min(1).max(120).nullable().optional(),
+  schoolYear: z.string().trim().min(1).max(120).nullable().optional(),
+  gradeOrScore: z.string().trim().min(1).max(120).nullable().optional(),
+  description: z.string().trim().min(1).max(2000).nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  status: z.string().trim().min(1).max(80).nullable().optional(),
+});
+
+export const resumeCertificateSuggestionsInputSchema = z.object({
+  resumeSqid: z.string().trim().min(1),
+  targetRole: z.string().trim().min(1).max(200),
+  experienceSummaries: z.array(z.string().trim().min(1).max(2000)).max(40).default([]),
+  leadershipSummaries: z.array(z.string().trim().min(1).max(2000)).max(30).default([]),
+  activitySummaries: z.array(z.string().trim().min(1).max(2000)).max(30).default([]),
+  certificates: z.array(resumeCertificateSuggestionCandidateInputSchema).min(1).max(100),
+  maxResults: z.number().int().min(1).max(20).default(5),
+});
+
 export const studentJobTargetSuggestionsOutputSchema = z.object({
   suggestions: z.array(z.object({
     title: z.string().trim().min(1).max(200),
@@ -125,6 +147,28 @@ export const companyRecommendationSearchOutputSchema = z.object({
   targetRole: z.string().trim().min(1).max(200),
   results: z.array(companyRecommendationItemOutputSchema).max(20),
   searchedAt: z.string().trim().min(1),
+});
+
+export const resumeCertificateSuggestionItemOutputSchema = z.object({
+  certificationSqid: z.string().trim().min(1),
+  achievementName: z.string().trim().min(1).max(200),
+  institution: z.string().trim().min(1).max(200).nullable().optional(),
+  issuedDate: z.string().trim().min(1).max(120).nullable().optional(),
+  schoolYear: z.string().trim().min(1).max(120).nullable().optional(),
+  gradeOrScore: z.string().trim().min(1).max(120).nullable().optional(),
+  description: z.string().trim().min(1).max(2000).nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(80)).max(12),
+  status: z.string().trim().min(1).max(80).nullable().optional(),
+  relevanceScore: z.number().int().min(0).max(100),
+  matchReason: z.string().trim().min(1).max(1200),
+  recommendedUsage: z.string().trim().min(1).max(600),
+});
+
+export const resumeCertificateSuggestionsOutputSchema = z.object({
+  resumeSqid: z.string().trim().min(1),
+  targetRole: z.string().trim().min(1).max(200),
+  totalCertificatesReviewed: z.number().int().min(0).max(100),
+  suggestions: z.array(resumeCertificateSuggestionItemOutputSchema).max(20),
 });
 
 export const resumeRelationTypeSchema = z.enum([
@@ -259,6 +303,8 @@ export type TailorResumeForJobInput = z.output<typeof tailorResumeForJobInputSch
 export type StudentJobTargetSuggestionsInput = z.output<typeof studentJobTargetSuggestionsInputSchema>;
 export type StudentCareerHintInput = z.output<typeof studentCareerHintInputSchema>;
 export type CompanyRecommendationSearchInput = z.output<typeof companyRecommendationSearchInputSchema>;
+export type ResumeCertificateSuggestionCandidateInput = z.output<typeof resumeCertificateSuggestionCandidateInputSchema>;
+export type ResumeCertificateSuggestionsInput = z.output<typeof resumeCertificateSuggestionsInputSchema>;
 export type ResumeRelationType = z.output<typeof resumeRelationTypeSchema>;
 export type ResumeAnalysisOutput = z.output<typeof resumeAnalysisOutputSchema>;
 export type ResumeJobProfileOutput = z.output<typeof resumeJobProfileOutputSchema>;
@@ -266,3 +312,5 @@ export type ResumeTailoringOutput = z.output<typeof resumeTailoringOutputSchema>
 export type StudentJobTargetSuggestionsOutput = z.output<typeof studentJobTargetSuggestionsOutputSchema>;
 export type StudentCareerHintOutput = z.output<typeof studentCareerHintOutputSchema>;
 export type CompanyRecommendationSearchOutput = z.output<typeof companyRecommendationSearchOutputSchema>;
+export type ResumeCertificateSuggestionItemOutput = z.output<typeof resumeCertificateSuggestionItemOutputSchema>;
+export type ResumeCertificateSuggestionsOutput = z.output<typeof resumeCertificateSuggestionsOutputSchema>;

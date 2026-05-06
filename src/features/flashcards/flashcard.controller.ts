@@ -27,6 +27,13 @@ export class FlashcardController {
     res.status(201).json(result);
   };
 
+  getLearnSessionStartFlow = async (req: Request, res: Response): Promise<void> => {
+    const body = startFlashcardLearnSessionBodySchema.parse(req.body ?? {});
+    const input = startFlashcardLearnSessionInputSchema.parse(body);
+    const result = await this.flashcardService.getLearnSessionStartFlow(input, req.header("authorization"));
+    res.status(result.action === "created" ? 201 : 200).json(result);
+  };
+
   getActiveLearnSession = async (req: Request, res: Response): Promise<void> => {
     const query = getActiveFlashcardLearnSessionQuerySchema.parse(req.query ?? {});
     const input = getActiveFlashcardLearnSessionInputSchema.parse(query);
@@ -45,9 +52,7 @@ export class FlashcardController {
     const body = submitFlashcardLearnAnswerBodySchema.parse(req.body ?? {});
     const input = submitFlashcardLearnAnswerInputSchema.parse({
       sessionSqid: params.sessionSqid,
-      sessionItemSqid: body.sessionItemSqid,
-      answer: body.answer,
-      responseTimeMs: body.responseTimeMs,
+      ...body,
     });
 
     const result = await this.flashcardService.submitLearnSessionAnswer(input, req.header("authorization"));
@@ -86,8 +91,7 @@ export class FlashcardController {
 
     const input = submitAndAnalyzeFlashcardInputSchema.parse({
       flashcardSqid: params.flashcardSqid,
-      answer: body.answer,
-      responseTimeMs: body.responseTimeMs,
+      ...body,
     });
 
     const result = await this.flashcardService.submitAndAnalyze(input, req.header("authorization"));

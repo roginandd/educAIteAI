@@ -4,6 +4,7 @@ import { env } from "../../config/env";
 import { noteGenerationOutputSchema, summarizeNoteOutputSchema } from "../../features/notes/note.dto";
 import { buildNoteAgentTools } from "../../features/notes/note.tools";
 import { NoteService } from "../../features/notes/note.service";
+import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
 import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
 import { noteGenerationAgentInstructions, notesAgentInstructions, noteSummarizationAgentInstructions } from "./instructions";
 
@@ -23,7 +24,7 @@ export function createNoteGenerationAgent(): LlmAgent {
     description: "Generates a grounded study note from a single PDF document.",
     model: env.GOOGLE_GENAI_NOTE_PDF_MODEL,
     instruction: noteGenerationAgentInstructions,
-    outputSchema: noteGenerationOutputSchema,
+    outputSchema: toGeminiServingSchema(noteGenerationOutputSchema),
     outputKey: "note_generation_output",
     generateContentConfig: {
       temperature: 0.2,
@@ -44,7 +45,7 @@ export function createNoteSummarizationAgent(): LlmAgent {
     description: "Generates a preview summary from a persisted note.",
     model: env.GOOGLE_GENAI_MODEL,
     instruction: noteSummarizationAgentInstructions,
-    outputSchema: summarizeNoteOutputSchema,
+    outputSchema: toGeminiServingSchema(summarizeNoteOutputSchema),
     outputKey: "note_summarization_output",
     generateContentConfig: {
       temperature: 0.2,

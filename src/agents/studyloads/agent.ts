@@ -4,6 +4,7 @@ import { env } from "../../config/env";
 import { studyLoadCourseParsingOutputSchema } from "../../features/studyloads/studyload.dto";
 import { buildStudyLoadAgentTools } from "../../features/studyloads/studyload.tools";
 import { StudyLoadService } from "../../features/studyloads/studyload.service";
+import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
 import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
 import { studyloadPdfParsingAgentInstructions, studyloadsAgentInstructions } from "./instructions";
 
@@ -23,7 +24,7 @@ export function createStudyLoadParsingAgent(): LlmAgent {
     description: "Parses a studyload PDF into normalized studyload metadata and course rows.",
     model: env.GOOGLE_GENAI_MODEL,
     instruction: studyloadPdfParsingAgentInstructions,
-    outputSchema: studyLoadCourseParsingOutputSchema,
+    outputSchema: toGeminiServingSchema(studyLoadCourseParsingOutputSchema),
     outputKey: "studyload_parsing_output",
     generateContentConfig: {
       temperature: 0,
