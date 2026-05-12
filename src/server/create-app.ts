@@ -69,6 +69,7 @@ export function createApp(dependencies: AppDependencies) {
       res.status(error.statusCode).json({
         code: error.code,
         message: error.message,
+        ...(error.details ? { details: error.details } : {}),
       });
       return;
     }

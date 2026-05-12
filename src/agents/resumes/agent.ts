@@ -2,6 +2,7 @@ import { InMemoryRunner, LlmAgent } from "@google/adk";
 
 import { env } from "../../config/env";
 import {
+  jobMatchIntelligenceOutputSchema,
   resumeAnalysisOutputSchema,
   resumeCertificateSuggestionsOutputSchema,
   resumeJobProfileOutputSchema,
@@ -12,6 +13,7 @@ import { ResumeService } from "../../features/resumes/resume.service";
 import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
 import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
 import {
+  jobMatchIntelligenceAgentInstructions,
   resumeAnalysisAgentInstructions,
   resumeCertificateSuggestionAgentInstructions,
   resumeJobProfilingAgentInstructions,
@@ -85,6 +87,20 @@ export function createResumeCertificateSuggestionAgent(): LlmAgent {
   });
 }
 
+export function createJobMatchIntelligenceAgent(): LlmAgent {
+  return new LlmAgent({
+    name: "job_match_intelligence_agent",
+    description: "Plans public job searches and evaluates resume-to-job fit with structured improvement actions.",
+    model: env.GOOGLE_GENAI_RESUME_MODEL,
+    instruction: jobMatchIntelligenceAgentInstructions,
+    outputSchema: toGeminiServingSchema(jobMatchIntelligenceOutputSchema),
+    outputKey: "job_match_intelligence_output",
+    generateContentConfig: {
+      temperature: 0.35,
+    },
+  });
+}
+
 export function createResumeAnalysisRunner(): InMemoryRunner {
   return new InMemoryRunner({
     appName: env.GOOGLE_ADK_APP_NAME,
@@ -110,5 +126,12 @@ export function createResumeCertificateSuggestionRunner(): InMemoryRunner {
   return new InMemoryRunner({
     appName: env.GOOGLE_ADK_APP_NAME,
     agent: createResumeCertificateSuggestionAgent(),
+  });
+}
+
+export function createJobMatchIntelligenceRunner(): InMemoryRunner {
+  return new InMemoryRunner({
+    appName: env.GOOGLE_ADK_APP_NAME,
+    agent: createJobMatchIntelligenceAgent(),
   });
 }

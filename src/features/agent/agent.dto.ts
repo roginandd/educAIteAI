@@ -14,6 +14,7 @@ import {
   studentJobTargetSuggestionsInputSchema,
   tailorResumeForJobInputSchema,
 } from "../resumes/resume.dto";
+import { studyFocusChatInputSchema } from "../study-buddy/study-buddy.dto";
 import { parseAndApplyStudyLoadPdfInputSchema } from "../studyloads/studyload.dto";
 
 export const agentMessageBodySchema = z.object({
@@ -40,6 +41,7 @@ export const agentTaskIntentSchema = z.enum([
   "search_resume_job_suggestions",
   "recommend_resume_job_opportunities",
   "parse_and_apply_studyload_pdf",
+  "generate_study_focus_chat_reply",
 ]);
 
 const generateNoteFromDocumentTaskSchema = z.object({
@@ -117,6 +119,11 @@ const parseAndApplyStudyLoadPdfTaskSchema = z.object({
   payload: parseAndApplyStudyLoadPdfInputSchema,
 });
 
+const generateStudyFocusChatReplyTaskSchema = z.object({
+  intent: z.literal("generate_study_focus_chat_reply"),
+  payload: studyFocusChatInputSchema,
+});
+
 export const agentTaskBodySchema = z.discriminatedUnion("intent", [
   generateNoteFromDocumentTaskSchema,
   summarizeNoteTaskSchema,
@@ -133,6 +140,7 @@ export const agentTaskBodySchema = z.discriminatedUnion("intent", [
   searchResumeJobSuggestionsTaskSchema,
   recommendResumeJobOpportunitiesTaskSchema,
   parseAndApplyStudyLoadPdfTaskSchema,
+  generateStudyFocusChatReplyTaskSchema,
 ]);
 
 export const agentTaskInputSchema = agentTaskBodySchema;

@@ -16,6 +16,7 @@ import {
   studentJobTargetSuggestionsResponseSchema,
   tailorResumeForJobResponseSchema,
 } from "../resumes/resume.response";
+import { studyFocusChatOutputSchema } from "../study-buddy/study-buddy.dto";
 import { parseAndApplyStudyLoadPdfResponseSchema } from "../studyloads/studyload.response";
 
 export const agentMessageResponseSchema = z.object({
@@ -82,6 +83,10 @@ export const agentTaskResponseSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("parse_and_apply_studyload_pdf"),
     result: parseAndApplyStudyLoadPdfResponseSchema,
+  }),
+  z.object({
+    intent: z.literal("generate_study_focus_chat_reply"),
+    result: studyFocusChatOutputSchema,
   }),
 ]);
 

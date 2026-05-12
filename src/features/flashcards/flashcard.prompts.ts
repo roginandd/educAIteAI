@@ -42,7 +42,9 @@ For Algorithm cards:
 - Do not use static placeholder names or generic templates such as solve(input), Object input, your_table, sample input, or "Write your code here" unless those exact terms are grounded in the source.
 - validationConfigJson must include languagePolicy and supportedLanguages.
 - validationConfigJson must include visibleTestCases.
-- visibleTestCases must contain at least 5 concrete source-grounded test cases.
+- visibleTestCases must contain concrete source-grounded object test cases.
+- Every visibleTestCases and hiddenTestCases entry must include name, input, and expectedOutput.
+- Never output test cases as plain strings, markdown bullets, or compact "input -> output" text.
 
 For CodeReading cards:
 - validationConfigJson must include codeSnippet.
@@ -146,13 +148,13 @@ export function buildGenerationPrompt(
     "For OutputPrediction, answer must contain the exact predicted output, return value, or final state.",
     "For Algorithm, answer must describe the correct approach and key complexity reasoning.",
     "For Debugging, answer must identify the bug and the fix.",
-    'Return only JSON matching this shape: {"flashcards":[{"itemType":"Algorithm | CodeReading | OutputPrediction | Debugging | ShortAnswer | Conceptual","question":"...","answer":"...","conceptExplanation":"...","answeringGuidance":"...","difficulty":55,"cognitiveSkill":"Apply","learningDomain":"Programming","technicalLanguage":"InferredLanguage","acceptedAnswerAliases":[],"tagsJson":["programming"],"rubricJson":{"criteria":["grounded in source material"]},"validationConfigJson":{"languagePolicy":"source-language | any","supportedLanguages":["InferredLanguage"],"functionSignature":"source-grounded language-specific function signature","starterCodeByLanguage":{"InferredLanguage":"AI-generated Judge0-ready starter code with helpful comments and no solution"},"visibleTestCases":[{"input":"concrete source-grounded input","expectedOutput":"concrete expected output"},{"input":"second concrete input","expectedOutput":"second concrete expected output"}]}}]}.',
+    'Return only JSON matching this shape: {"flashcards":[{"itemType":"Algorithm | CodeReading | OutputPrediction | Debugging | ShortAnswer | Conceptual","question":"...","answer":"...","conceptExplanation":"...","answeringGuidance":"...","difficulty":55,"cognitiveSkill":"Apply","learningDomain":"Programming","technicalLanguage":"InferredLanguage","acceptedAnswerAliases":[],"tagsJson":["programming"],"rubricJson":{"criteria":["grounded in source material"]},"validationConfigJson":{"languagePolicy":"source-language | any","supportedLanguages":["InferredLanguage"],"functionSignature":"source-grounded language-specific function signature","starterCodeByLanguage":{"InferredLanguage":"AI-generated Judge0-ready starter code with helpful comments and no solution"},"visibleTestCases":[{"name":"handles empty list","input":"[]","expectedOutput":"0"},{"name":"handles regular values","input":"[1,2,3]","expectedOutput":"3"}]}}]}.',
     "If you output MultipleChoice, validationConfigJson must include options and correctOptionIds.",
     "If you output CodeReading, validationConfigJson must include codeSnippet and language.",
     "If you output OutputPrediction, validationConfigJson must include codeSnippet and expectedOutput.",
     "If you output Algorithm, validationConfigJson must include languagePolicy, supportedLanguages, functionSignature, starterCodeByLanguage, and visibleTestCases.",
-    "If you output Algorithm, visibleTestCases must contain at least 5 concrete test cases.",
-    "If you output Debugging, validationConfigJson must include buggyCode and visibleTestCases.",
+    "If you output Algorithm, visibleTestCases must contain concrete object test cases with name, input, and expectedOutput.",
+    "If you output Debugging, validationConfigJson must include buggyCode and visibleTestCases with name, input, and expectedOutput.",
     "For Conceptual and ShortAnswer, rubricJson must include criteria.",
     "",
     ...(existingQuestions.length > 0

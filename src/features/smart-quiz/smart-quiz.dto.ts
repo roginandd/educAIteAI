@@ -51,6 +51,21 @@ export const smartQuizVerdictSchema = z.enum([
   "Incorrect",
 ]);
 
+export const smartQuizValidationStatusSchema = z.enum([
+  "Ready",
+  "Pending",
+  "Downgraded",
+  "Failed",
+]);
+
+export const smartQuizHydrationStatusSchema = z.enum([
+  "PreviewReady",
+  "Hydrating",
+  "Ready",
+  "PartiallyReady",
+  "Failed",
+]);
+
 export const noteContextSchema = z.object({
   noteSqid: z.string().trim().min(1),
   noteName: z.string().trim().min(1),
@@ -103,6 +118,7 @@ const smartQuizValidationOptionSchema = z.object({
 });
 
 const smartQuizVisibleTestCaseSchema = z.object({
+  name: z.string().trim().min(1),
   input: z.string().trim().min(1),
   expectedOutput: z.string().trim().min(1),
 });
@@ -149,7 +165,7 @@ const outputPredictionValidationConfigSchema = z.object({
 const algorithmValidationConfigSchema = z.object({
   functionSignature: z.string().trim().min(1),
   starterCodeByLanguage: smartQuizStringMapSchema,
-  visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]),
+  visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).min(1),
   constraints: z.string().trim().min(1).optional(),
   private: z.object({
     hiddenTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]).optional(),
@@ -159,7 +175,7 @@ const algorithmValidationConfigSchema = z.object({
 
 const debuggingValidationConfigSchema = z.object({
   buggyCode: z.string().trim().min(1),
-  visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]),
+  visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).min(1),
   private: z.object({
     expectedFix: z.string().trim().min(1).optional(),
     hiddenTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]).optional(),
@@ -223,6 +239,7 @@ export const generatedSmartQuizItemDraftSchema = z.discriminatedUnion("itemType"
     supportedLanguages: z.array(z.string().trim().min(1)).default([]),
     starterCodeByLanguage: z.record(z.string().trim().min(1), z.string().trim().min(1)).default({}),
     visibleTestCases: z.array(generatedSmartQuizVisibleTestCaseSchema).default([]),
+    hiddenTestCases: z.array(generatedSmartQuizVisibleTestCaseSchema).default([]),
     languagePolicy: z.string().trim().max(120).optional(),
   }),
   generatedSmartQuizItemDraftBaseSchema.extend({
@@ -230,6 +247,7 @@ export const generatedSmartQuizItemDraftSchema = z.discriminatedUnion("itemType"
     buggyCode: z.string().trim().max(20000).default(""),
     language: z.string().trim().max(80).default(""),
     visibleTestCases: z.array(generatedSmartQuizVisibleTestCaseSchema).default([]),
+    hiddenTestCases: z.array(generatedSmartQuizVisibleTestCaseSchema).default([]),
     expectedFixSummary: z.string().trim().max(4000).optional(),
   }),
 ]);
@@ -276,7 +294,8 @@ export const normalizedGeneratedSmartQuizItemDraftSchema = z.discriminatedUnion(
     functionSignature: z.string().trim().min(1).max(2000),
     supportedLanguages: z.array(z.string().trim().min(1)).default([]),
     starterCodeByLanguage: smartQuizStringMapSchema,
-    visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]),
+    visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).min(1),
+    hiddenTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]),
     languagePolicy: z.string().trim().max(120).optional(),
   }),
   generatedSmartQuizItemDraftBaseSchema.omit({ rubric: true, validationConfig: true }).extend({
@@ -284,20 +303,23 @@ export const normalizedGeneratedSmartQuizItemDraftSchema = z.discriminatedUnion(
     expectedAnswer: z.string().trim().min(1).max(4000),
     buggyCode: z.string().trim().min(1).max(20000),
     language: z.string().trim().min(1).max(80),
-    visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]),
+    visibleTestCases: z.array(smartQuizVisibleTestCaseSchema).min(1),
+    hiddenTestCases: z.array(smartQuizVisibleTestCaseSchema).default([]),
     expectedFixSummary: z.string().trim().max(4000).optional(),
   }),
 ]);
 
 export const generateSmartQuizItemsPreviewInputSchema = z.object({
   deckSqid: z.string().trim().min(1).optional(),
+  count: z.coerce.number().int().min(3).max(10).optional(),
   course: courseContextSchema.optional(),
   notes: z.array(noteContextSchema).min(1).max(12),
   classification: smartQuizContextClassificationOutputSchema.optional(),
   generationOptions: z.object({
-    count: z.number().int().min(1).max(50).default(10),
+    count: z.coerce.number().int().min(3).max(10).default(10),
     allowedItemTypes: z.array(smartQuizV1ItemTypeSchema).optional(),
     includeRubrics: z.boolean().default(true),
+    excludeQuestions: z.array(z.string().trim().min(1)).default([]),
   }).optional(),
 });
 
@@ -335,6 +357,46 @@ export const normalizedGenerateSmartQuizItemsPreviewOutputSchema = z.object({
     model: z.string().trim().min(1),
     generatedAt: z.string().datetime(),
   }),
+});
+
+const smartQuizDraftValidationFieldsSchema = z.object({
+  draftId: z.string().trim().min(1),
+  validationStatus: smartQuizValidationStatusSchema,
+  validationWarnings: z.array(z.string().trim().min(1)).default([]),
+  validationErrors: z.array(z.string().trim().min(1)).default([]),
+});
+
+export const smartQuizGenerationPreviewDraftSchema = generatedSmartQuizItemDraftSchema
+  .and(smartQuizDraftValidationFieldsSchema);
+
+export const smartQuizSafePracticeDraftSchema = normalizedGeneratedSmartQuizItemDraftSchema
+  .and(smartQuizDraftValidationFieldsSchema.extend({
+    validationStatus: z.enum(["Ready", "Downgraded"]),
+  }));
+
+export const generateSmartQuizItemsPreviewJobOutputSchema = z.object({
+  generationJobSqid: z.string().trim().min(1),
+  requestedCount: z.number().int().min(3).max(10),
+  drafts: z.array(smartQuizGenerationPreviewDraftSchema),
+  hydrationStatus: smartQuizHydrationStatusSchema,
+  warnings: z.array(z.string().trim().min(1)).default([]),
+  errors: z.array(z.string().trim().min(1)).default([]),
+  metadata: z.object({
+    promptVersion: z.string().trim().min(1),
+    model: z.string().trim().min(1),
+    generatedAt: z.string().datetime(),
+  }),
+});
+
+export const smartQuizGenerationJobParamsSchema = z.object({
+  generationJobSqid: z.string().trim().min(1),
+});
+
+export const smartQuizGenerationJobOutputSchema = generateSmartQuizItemsPreviewJobOutputSchema.extend({
+  jobStatus: smartQuizHydrationStatusSchema,
+  safeToPracticeDrafts: z.array(smartQuizSafePracticeDraftSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 });
 
 const csvItemTypesSchema = z.string().trim().transform((value) =>
@@ -377,7 +439,7 @@ const multipartAllowedItemTypesSchema = z.preprocess((value) => {
 ]).optional());
 
 export const analyzePdfAndGenerateSmartQuizPreviewBodySchema = z.object({
-  count: z.coerce.number().int().min(1).max(50).optional().default(5),
+  count: z.coerce.number().int().min(3).max(10).optional().default(5),
   allowedItemTypes: multipartAllowedItemTypesSchema,
   technicalLanguageHint: z.string().trim().max(80).optional().default(""),
   programContext: z.string().trim().max(4000).optional(),
@@ -530,9 +592,13 @@ export type SmartQuizContextClassifyInput = z.output<typeof smartQuizContextClas
 export type SmartQuizContextClassificationOutput = z.output<typeof smartQuizContextClassificationOutputSchema>;
 export type SmartQuizSelectItemTypeInput = z.output<typeof smartQuizSelectItemTypeInputSchema>;
 export type SmartQuizSelectItemTypeOutput = z.output<typeof smartQuizSelectItemTypeOutputSchema>;
+export type SmartQuizValidationStatus = z.output<typeof smartQuizValidationStatusSchema>;
+export type SmartQuizHydrationStatus = z.output<typeof smartQuizHydrationStatusSchema>;
 export type GenerateSmartQuizItemsPreviewInput = z.output<typeof generateSmartQuizItemsPreviewInputSchema>;
 export type GenerateSmartQuizItemsPreviewOutput = z.output<typeof generateSmartQuizItemsPreviewOutputSchema>;
 export type NormalizedGenerateSmartQuizItemsPreviewOutput = z.output<typeof normalizedGenerateSmartQuizItemsPreviewOutputSchema>;
+export type GenerateSmartQuizItemsPreviewJobOutput = z.output<typeof generateSmartQuizItemsPreviewJobOutputSchema>;
+export type SmartQuizGenerationJobOutput = z.output<typeof smartQuizGenerationJobOutputSchema>;
 export type AnalyzePdfAndGenerateSmartQuizPreviewBody = z.output<typeof analyzePdfAndGenerateSmartQuizPreviewBodySchema>;
 export type AnalyzePdfAndGenerateSmartQuizPreviewOutput = z.output<typeof analyzePdfAndGenerateSmartQuizPreviewOutputSchema>;
 export type ScoreSmartQuizAnswerInput = z.output<typeof scoreSmartQuizAnswerInputSchema>;

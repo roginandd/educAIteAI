@@ -237,6 +237,8 @@ export const flashcardGenerationOutputSchema = z.object({
   flashcards: z.array(createBulkFlashcardItemSchema).min(1).max(10),
 });
 
+const performanceSummaryAiTextSchema = z.string().trim().min(1).max(2000).nullable();
+
 export const flashcardAttemptEvaluationOutputSchema = z.object({
   verdict: flashcardAnswerVerdictSchema,
   acceptedAsCorrect: z.boolean(),
@@ -292,8 +294,9 @@ export const flashcardEvaluationOutputSchema = z.object({
 
 export const performanceSummaryAiOutputSchema = z.object({
   aiStatus: flashcardAiStatusSchema,
-  aiInsight: z.string().trim().min(1).max(2000),
-  improvementSuggestion: z.string().trim().min(1).max(2000),
+  aiInsight: performanceSummaryAiTextSchema,
+  improvementSuggestion: performanceSummaryAiTextSchema,
+  insufficientReason: z.string().trim().min(1).max(2000).nullable().optional(),
 });
 
 export const upsertPerformanceSummaryAiRequestSchema = z.object({

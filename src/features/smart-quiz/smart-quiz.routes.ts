@@ -12,6 +12,9 @@ export function createSmartQuizRouter(smartQuizService: SmartQuizService): Route
   router.post("/context/classify", smartQuizController.classifyContext);
   router.post("/context/select-type", smartQuizController.selectItemType);
   router.post("/items/generate-preview", smartQuizController.generatePreview);
+  router.get("/generation-jobs/:generationJobSqid", smartQuizController.getGenerationJob);
+  router.post("/generation-jobs/:generationJobSqid/retry-hydration", smartQuizController.retryHydration);
+  router.post("/pdf/extract-text", upload.single("file"), smartQuizController.extractPdfText);
   router.post("/pdf/analyze-and-generate-preview", upload.single("file"), smartQuizController.analyzePdfAndGeneratePreview);
   router.post("/answers/score", smartQuizController.scoreAnswer);
   router.post("/code/run", smartQuizController.runCode);

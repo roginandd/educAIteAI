@@ -22,15 +22,24 @@ export class DuckDuckGoPublicWebSearchService implements PublicWebSearchService 
     url.searchParams.set("no_redirect", "1");
     url.searchParams.set("no_html", "1");
 
-    const response = await fetch(url, {
-      headers: { Accept: "application/json" },
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { Accept: "application/json" },
+      });
+    } catch {
+      return [];
+    }
 
     if (!response.ok) {
       return [];
     }
 
-    const payload = await response.json() as DuckDuckGoResponse;
+    const payload = await parseDuckDuckGoResponse(response);
+    if (!payload) {
+      return [];
+    }
+
     const results = flattenDuckDuckGoResults(payload.RelatedTopics ?? []);
 
     return results
@@ -77,4 +86,17 @@ function flattenDuckDuckGoResults(topics: DuckDuckGoTopic[]): PublicSearchResult
 
 function stripHtml(value: string): string {
   return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+async function parseDuckDuckGoResponse(response: Response): Promise<DuckDuckGoResponse | null> {
+  try {
+    const rawBody = await response.text();
+    if (!rawBody.trim()) {
+      return null;
+    }
+
+    return JSON.parse(rawBody) as DuckDuckGoResponse;
+  } catch {
+    return null;
+  }
 }

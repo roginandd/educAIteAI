@@ -14,6 +14,7 @@ import {
   studyLoadCourseParsingOutputSchema,
   uploadAndParseStudyLoadPdfInputSchema,
   type ApplyParsedStudyLoadCoursesInput,
+  type AuthenticatedStudyLoadStudentContext,
   type ParsedStudyLoadCourseItem,
   type ParseAndApplyStudyLoadPdfInput,
   type StudyLoadCourseParsingOutput,
@@ -30,6 +31,15 @@ import {
   type UploadAndParseStudyLoadPdfResponse,
 } from "./studyload.response";
 
+export interface StudyLoadParsingContext {
+  requestKind: "registration-studyload-upload" | "upload-parse-and-apply" | "parse-and-apply";
+  studentSqid?: string;
+  registeredStudentIdNumber?: string;
+  studyLoadSqid?: string;
+  studyLoadStudentSqid?: string;
+  authenticatedStudent?: AuthenticatedStudyLoadStudentContext;
+}
+
 export class StudyLoadService {
   constructor(
     private readonly parsingRunner: Runner,
@@ -38,9 +48,13 @@ export class StudyLoadService {
     private readonly pdfExtractionService: PdfExtractionService,
   ) {}
 
-  async parseUploadedStudyLoadPdf(file: Express.Multer.File | undefined): Promise<StudyLoadCourseParsingOutput> {
+  async parseUploadedStudyLoadPdf(
+    file: Express.Multer.File | undefined,
+    context: StudyLoadParsingContext,
+  ): Promise<StudyLoadCourseParsingOutput> {
+    const parsingContext = requireStudyLoadParsingContext(context);
     const studyLoadFile = this.requireStudyLoadPdf(file);
-    return this.parseStudyLoadPdfBase64WithAgent(await readUploadedFileAsBase64(studyLoadFile));
+    return this.parseStudyLoadPdfBase64WithAgent(await readUploadedFileAsBase64(studyLoadFile), parsingContext);
   }
 
   async uploadParsedStudyLoad(
@@ -87,9 +101,15 @@ export class StudyLoadService {
     file: Express.Multer.File | undefined,
     authorizationHeader: string | undefined,
   ): Promise<UploadAndParseStudyLoadPdfResponse> {
+    const parsedInput = uploadAndParseStudyLoadPdfInputSchema.parse(input);
+    const authHeader = this.requireAuthorizationHeader(authorizationHeader);
+
     try {
-      const parsedStudyLoad = await this.parseUploadedStudyLoadPdf(file);
-      return this.uploadParsedStudyLoad(input, parsedStudyLoad, file, authorizationHeader);
+      const parsedStudyLoad = await this.parseUploadedStudyLoadPdf(file, {
+        requestKind: "upload-parse-and-apply",
+        studentSqid: parsedInput.studentSqid,
+      });
+      return this.uploadParsedStudyLoad(parsedInput, parsedStudyLoad, file, authHeader);
     } finally {
       await cleanupUploadedFile(file);
     }
@@ -118,7 +138,12 @@ export class StudyLoadService {
       signedUrl: signedUrl.url,
       displayName: `${studyLoad.semester} ${studyLoad.schoolYearStart}-${studyLoad.schoolYearEnd}`,
     });
-    const parsedStudyLoad = await this.parseStudyLoadFromExtractedText(extractedArtifact.extractedText);
+    const parsedStudyLoad = await this.parseStudyLoadFromExtractedText(extractedArtifact.extractedText, {
+      requestKind: "parse-and-apply",
+      studyLoadSqid: studyLoad.sqid,
+      studyLoadStudentSqid: studyLoad.studentSqid,
+      authenticatedStudent: parsedInput.authenticatedStudent,
+    });
     const appliedStudyLoad = await this.applyParsedCourses(
       {
         studyLoadSqid: parsedInput.studyLoadSqid,
@@ -259,11 +284,16 @@ export class StudyLoadService {
     return signedUrl.url;
   }
 
-  private async parseStudyLoadPdfBase64WithAgent(pdfBase64: string): Promise<StudyLoadCourseParsingOutput> {
+  private async parseStudyLoadPdfBase64WithAgent(
+    pdfBase64: string,
+    context: StudyLoadParsingContext,
+  ): Promise<StudyLoadCourseParsingOutput> {
+    const parsingContext = requireStudyLoadParsingContext(context);
+
     return this.pdfProcessingService.runStructuredPdfAgentFromBase64({
       runner: this.parsingRunner,
       userId: "studyload_service",
-      prompt: buildStudyLoadParsingPrompt(),
+      prompt: buildStudyLoadParsingPrompt(parsingContext),
       pdfBase64,
       outputKey: "studyload_parsing_output",
       outputSchema: studyLoadCourseParsingOutputSchema,
@@ -272,11 +302,16 @@ export class StudyLoadService {
     });
   }
 
-  private async parseStudyLoadFromExtractedText(extractedText: string): Promise<StudyLoadCourseParsingOutput> {
+  private async parseStudyLoadFromExtractedText(
+    extractedText: string,
+    context: StudyLoadParsingContext,
+  ): Promise<StudyLoadCourseParsingOutput> {
+    const parsingContext = requireStudyLoadParsingContext(context);
+
     return this.pdfProcessingService.runStructuredTextAgent({
       runner: this.parsingRunner,
       userId: "studyload_service",
-      prompt: buildStudyLoadParsingPrompt(),
+      prompt: buildStudyLoadParsingPrompt(parsingContext),
       sourceText: extractedText,
       outputKey: "studyload_parsing_output",
       outputSchema: studyLoadCourseParsingOutputSchema,
@@ -294,12 +329,47 @@ export class StudyLoadService {
   }
 }
 
-function buildStudyLoadParsingPrompt(): string {
+function buildStudyLoadParsingPrompt(context: StudyLoadParsingContext): string {
   return [
+    "RLF-Studyload-Context-Enforcer:",
+    "Use the request context below as the only allowed identity boundary for this parse.",
+    "Do not infer student identity from the PDF text and do not mix rows across another student or studyload.",
+    `Request context JSON: ${JSON.stringify(context)}`,
+    "",
     "Extract normalized course rows from this extracted studyload text.",
-    'Return only JSON matching this shape: {"courses":[{"edpCode":"...","courseName":"...","units":3}]}.',
+    'Return only JSON matching this shape: {"semester":1,"schoolYearStart":2025,"schoolYearEnd":2026,"courses":[{"edpCode":"...","courseName":"...","units":3}]}.',
     "Only return real course rows supported by the extracted text.",
+    "Only return semester and school-year values supported by the extracted text.",
     "Ignore non-course content such as headers, student information, page numbers, and totals.",
     "If a row is unreadable or missing a trustworthy EDP code, omit it instead of guessing.",
   ].join("\n");
+}
+
+function requireStudyLoadParsingContext(context: StudyLoadParsingContext): StudyLoadParsingContext {
+  const parsedContext: StudyLoadParsingContext = {
+    requestKind: context.requestKind,
+    studentSqid: context.studentSqid?.trim(),
+    registeredStudentIdNumber: context.registeredStudentIdNumber?.trim(),
+    studyLoadSqid: context.studyLoadSqid?.trim(),
+    studyLoadStudentSqid: context.studyLoadStudentSqid?.trim(),
+    authenticatedStudent: context.authenticatedStudent,
+  };
+
+  const hasIdentity = Boolean(
+    parsedContext.authenticatedStudent?.studentSqid
+      || parsedContext.studentSqid
+      || parsedContext.registeredStudentIdNumber
+      || parsedContext.studyLoadSqid
+      || parsedContext.studyLoadStudentSqid,
+  );
+
+  if (!parsedContext.requestKind || !hasIdentity) {
+    throw new AppError(
+      "Studyload parsing requires authenticated student, registration request, or persisted studyload context.",
+      "STUDYLOAD_PARSE_CONTEXT_REQUIRED",
+      400,
+    );
+  }
+
+  return parsedContext;
 }

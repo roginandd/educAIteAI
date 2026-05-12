@@ -868,42 +868,54 @@ function enforceDeterministicCodeEvaluation(
     return evaluation;
   }
 
-  const allTestsPassed = didAllRequiredExecutionTestsPass(execution);
-  const executionFailed = execution.executionStatus !== "completed";
-  const feedbackSummary = buildExecutionFeedbackSummary(execution, allTestsPassed);
+  const executionFailed = didJudge0ExecutionFail(execution);
+  const feedbackSummary = buildExecutionFeedbackSummary(execution);
   const semanticRationale = executionFailed
-    ? "Judge0 reported an execution error before deterministic correctness comparison could complete."
-    : allTestsPassed
-      ? "Judge0 output matched the expected output for every required test case."
-      : "Judge0 completed execution, but one or more required test cases failed deterministic output comparison.";
+    ? "Judge0 reported a compile-time or runtime failure before AI assessment could continue."
+    : "Judge0 accepted the submission for AI assessment after compile-time and runtime checks passed.";
+
+  if (!executionFailed) {
+    return flashcardEvaluationOutputSchema.parse({
+      ...evaluation,
+      evaluation: {
+        ...evaluation.evaluation,
+        feedbackSummary,
+        semanticRationale,
+      },
+      frontendReview: {
+        ...evaluation.frontendReview,
+        answerReview: feedbackSummary,
+        technicalDiagnostics: {
+          language: evaluation.frontendReview.technicalDiagnostics?.language ?? suppliedContext.technicalLanguage ?? evaluationContext.technicalLanguage ?? "",
+          expectedBehavior: "Compile and run successfully in Judge0 before AI assessment.",
+          actualBehavior: execution.message,
+          issues: buildExecutionIssues(execution),
+        },
+      },
+    });
+  }
 
   return flashcardEvaluationOutputSchema.parse({
     ...evaluation,
     evaluation: {
       ...evaluation.evaluation,
-      verdict: allTestsPassed ? "ExactCorrect" : "Incorrect",
-      acceptedAsCorrect: allTestsPassed,
-      qualityScore: allTestsPassed ? evaluation.evaluation.qualityScore : 0,
+      verdict: "Incorrect",
+      acceptedAsCorrect: false,
+      qualityScore: 0,
       feedbackSummary,
       semanticRationale,
     },
     frontendReview: {
       ...evaluation.frontendReview,
-      resultTone: allTestsPassed ? "correct" : "incorrect",
-      verdict: allTestsPassed ? "Correct" : "Incorrect",
-      qualityScore: allTestsPassed ? evaluation.frontendReview.qualityScore : 0,
-      isCorrect: allTestsPassed,
+      resultTone: "incorrect",
+      verdict: "Incorrect",
+      qualityScore: 0,
+      isCorrect: false,
       answerReview: feedbackSummary,
-      misconception: allTestsPassed
-        ? evaluation.frontendReview.misconception
-        : executionFailed
-          ? "The submission did not complete successfully in Judge0."
-          : "The submission did not satisfy all required Judge0 test cases.",
+      misconception: "The submission did not complete successfully in Judge0.",
       technicalDiagnostics: {
         language: evaluation.frontendReview.technicalDiagnostics?.language ?? suppliedContext.technicalLanguage ?? evaluationContext.technicalLanguage ?? "",
-        expectedBehavior: allTestsPassed
-          ? "Pass all required Judge0 test cases."
-          : "Pass every predefined Judge0 test case before qualitative review.",
+        expectedBehavior: "Compile and run successfully in Judge0 before AI assessment.",
         actualBehavior: execution.message,
         issues: buildExecutionIssues(execution),
       },
@@ -1010,32 +1022,28 @@ function parseExecutionResult(value: unknown): CodeExecutionOutput | null {
   }
 }
 
-function didAllRequiredExecutionTestsPass(execution: CodeExecutionOutput): boolean {
-  return execution.executionStatus === "completed"
-    && execution.visibleTestsPassed === execution.visibleTestsTotal
-    && execution.hiddenTestsPassed === execution.hiddenTestsTotal;
+function didJudge0ExecutionFail(execution: CodeExecutionOutput): boolean {
+  const statuses = [
+    execution.executionStatus,
+    execution.compileStatus,
+    execution.runtimeStatus,
+  ];
+
+  return statuses.some((status) => {
+    const normalized = status.trim().toLowerCase();
+    return normalized.includes("fail")
+      || normalized.includes("error")
+      || normalized.includes("timeout")
+      || normalized.includes("rejected");
+  });
 }
 
-function buildExecutionFeedbackSummary(execution: CodeExecutionOutput, allTestsPassed: boolean): string {
-  if (execution.executionStatus !== "completed") {
-    return execution.message;
+function buildExecutionFeedbackSummary(execution: CodeExecutionOutput): string {
+  if (didJudge0ExecutionFail(execution)) {
+    return execution.message || "Judge0 reported a compile-time or runtime failure.";
   }
 
-  if (allTestsPassed) {
-    return "Judge0 passed all required test cases before AI review.";
-  }
-
-  const failedVisibleTests = execution.results.filter((result) => !result.passed);
-  if (failedVisibleTests.length > 0) {
-    const names = failedVisibleTests.slice(0, 3).map((result) => result.name).join(", ");
-    return `Judge0 failed these visible test cases: ${names}.`;
-  }
-
-  if (execution.hiddenSummary.failed > 0) {
-    return `Visible tests passed, but ${execution.hiddenSummary.failed} hidden test case${execution.hiddenSummary.failed === 1 ? "" : "s"} failed in Judge0.`;
-  }
-
-  return execution.message;
+  return "Judge0 compile-time and runtime checks passed. AI assessment can continue.";
 }
 
 function buildExecutionIssues(execution: CodeExecutionOutput): string[] {

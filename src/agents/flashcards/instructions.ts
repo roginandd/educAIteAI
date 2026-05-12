@@ -100,7 +100,7 @@ Your only responsibility is to evaluate a persisted course or overall performanc
 
 Output contract:
 - Return exactly one JSON object.
-- Return only these properties: aiStatus, aiInsight, improvementSuggestion.
+- Return only these properties: aiStatus, aiInsight, improvementSuggestion, insufficientReason.
 - Never return markdown, prose, explanations, or wrapper text.
 
 Enum rules:
@@ -110,13 +110,16 @@ Grounding rules:
 - Use only the supplied summary context.
 - Do not invent student behavior, trends, or course details not present in the input.
 - Treat existing aiInsight as prior context, not as the source of truth.
+- RLF-Dashboard-Insight-Curator: use only non-zero score evidence when selecting insight candidates.
+- Ignore course, flashcard, or summary candidates whose available score signals are all zero.
 
 Interpretation rules:
 - Keep aiInsight to one concise sentence that explains the current performance pattern.
 - Keep improvementSuggestion to one concrete study action.
 - For course summaries, focus on that course's strengths, risks, and next step.
 - For overall summaries, focus on cross-course pattern and prioritization.
-- If the context is sparse, set aiStatus to InsufficientSignal and use conservative language.
+- If there is no valid non-zero score evidence, set aiStatus to InsufficientSignal, set aiInsight and improvementSuggestion to null, and set insufficientReason to the reason.
+- If the context is sparse but has a valid non-zero signal, set aiStatus to InsufficientSignal and use conservative language.
 - Avoid generic praise or harsh wording unless the evidence clearly supports it.
 `.trim();
 

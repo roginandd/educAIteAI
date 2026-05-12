@@ -38,6 +38,7 @@ const flashcardDraftRubricCriterionSchema = z.object({
 });
 
 const flashcardDraftVisibleTestCaseSchema = z.object({
+  name: z.string().trim().min(1),
   input: z.string().trim().min(1),
   expectedOutput: z.string().trim().min(1),
   explanation: z.string().trim().default(""),
@@ -136,6 +137,58 @@ export const generatedFlashcardDraftAiResponseSchema = z.discriminatedUnion("ite
   }),
 ]);
 
+const generatedFlashcardPreviewDraftAiResponseSchema = z.discriminatedUnion("itemType", [
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("Flashcard"),
+    answer: z.string().trim().min(1),
+    acceptedAnswerAliases: z.array(z.string().trim().min(1)).default([]),
+  }),
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("Conceptual"),
+    expectedAnswer: z.string().trim().min(1),
+    rubricCriteria: z.array(flashcardDraftRubricCriterionSchema).default([]),
+  }),
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("ShortAnswer"),
+    expectedAnswer: z.string().trim().min(1),
+    rubricCriteria: z.array(flashcardDraftRubricCriterionSchema).default([]),
+  }),
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("MultipleChoice"),
+    options: z.array(flashcardDraftOptionSchema).default([]),
+    correctOptionIds: z.array(z.string().trim().min(1)).default([]),
+    singleSelect: z.boolean().default(true),
+  }),
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("CodeReading"),
+    expectedAnswer: z.string().trim().min(1),
+    codeSnippet: z.string().trim().default(""),
+    language: z.string().default(""),
+  }),
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("Debugging"),
+    expectedAnswer: z.string().trim().min(1),
+    buggyCode: z.string().trim().default(""),
+    visibleTestCases: z.array(flashcardDraftVisibleTestCaseSchema).default([]),
+    expectedFixSummary: z.string().trim().optional(),
+  }),
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("Algorithm"),
+    expectedAnswer: z.string().trim().min(1),
+    functionSignature: z.string().trim().default(""),
+    supportedLanguages: z.array(z.string().trim().min(1)).default([]),
+    starterCodeByLanguage: z.record(z.string().trim().min(1), z.string().trim().min(1)).default({}),
+    visibleTestCases: z.array(flashcardDraftVisibleTestCaseSchema).default([]),
+    languagePolicy: z.string().trim().optional(),
+  }),
+  flashcardDraftBaseSchema.extend({
+    itemType: z.literal("OutputPrediction"),
+    codeSnippet: z.string().trim().default(""),
+    expectedOutput: z.string().trim().min(1),
+    language: z.string().default(""),
+  }),
+]);
+
 export const generateFlashcardsFromNoteResponseSchema = z.object({
   noteSqid: z.string().trim().min(1),
   generatedCount: z.number().int().min(1),
@@ -146,7 +199,7 @@ export const generateFlashcardsFromNoteResponseSchema = z.object({
 export const generateFlashcardsPreviewResponseSchema = z.object({
   noteSqid: z.string().trim().min(1),
   generatedCount: z.number().int().min(0),
-  drafts: z.array(generatedFlashcardDraftAiResponseSchema).default([]),
+  drafts: z.array(generatedFlashcardPreviewDraftAiResponseSchema).default([]),
 });
 
 export const studentFlashcardProgressResponseSchema = z.object({

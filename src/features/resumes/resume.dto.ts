@@ -121,6 +121,56 @@ export const studentCareerHintOutputSchema = z.object({
   hint: z.string().trim().min(1).max(500),
 });
 
+export const companyRecommendationMatchIntelligenceOutputSchema = z.object({
+  jobUnderstanding: z.object({
+    requiredSkills: z.array(z.string().trim().min(1).max(100)).max(30),
+    niceToHaveSkills: z.array(z.string().trim().min(1).max(100)).max(30),
+    experienceLevel: z.string().trim().min(1).max(120).nullable().optional(),
+    confidence: z.number().min(0).max(1),
+  }),
+  fitBreakdown: z.object({
+    skillMatch: z.number().int().min(0).max(100),
+    roleMatch: z.number().int().min(0).max(100),
+    locationCompatibility: z.number().int().min(0).max(100),
+    educationMatch: z.number().int().min(0).max(100),
+    careerGoalMatch: z.number().int().min(0).max(100),
+    freshnessConfidence: z.number().int().min(0).max(100),
+  }),
+  matchReasons: z.array(z.string().trim().min(1).max(500)).max(8),
+  gapReasons: z.array(z.string().trim().min(1).max(500)).max(8),
+  recommendedActions: z.array(z.object({
+    type: z.enum([
+      "resume_update",
+      "flashcard_generation",
+      "certificate_suggestion",
+      "project_recommendation",
+      "learning_action",
+    ]),
+    label: z.string().trim().min(1).max(240),
+  })).max(8),
+  roadmap: z.object({
+    summary: z.string().trim().min(1).max(800),
+    targetFitScore: z.number().int().min(0).max(100).nullable().optional(),
+    generatedFrom: z.enum(["gemini", "fallback"]),
+    items: z.array(z.object({
+      timeline: z.enum(["today", "this_week", "this_month", "next_60_days"]),
+      priority: z.enum(["high", "medium", "low"]),
+      skill: z.string().trim().min(1).max(100).nullable().optional(),
+      title: z.string().trim().min(1).max(160),
+      reason: z.string().trim().min(1).max(500),
+      actions: z.array(z.string().trim().min(1).max(260)).max(6),
+      outcome: z.string().trim().min(1).max(320),
+      resources: z.array(z.object({
+        title: z.string().trim().min(1).max(160),
+        url: z.string().trim().url().max(1000).nullable().optional(),
+        type: z.enum(["article", "course", "documentation", "video", "practice", "certificate", "job_posting"]),
+      })).max(6),
+    })).max(8),
+    betterFitRoles: z.array(z.string().trim().min(1).max(120)).max(6),
+  }),
+  aiConfidence: z.number().min(0).max(1),
+});
+
 export const companyRecommendationItemOutputSchema = z.object({
   recommendationSqid: z.string().trim().min(1).nullable().optional(),
   companyName: z.string().trim().min(1).max(200),
@@ -135,8 +185,9 @@ export const companyRecommendationItemOutputSchema = z.object({
   workSetup: z.string().trim().min(1).max(40),
   employmentType: z.string().trim().min(1).max(80).nullable().optional(),
   sourceUrl: z.string().trim().url().max(1000),
-  sourceDomain: z.string().trim().max(255).optional(),
+  sourceDomain: z.string().trim().max(255).nullable().optional(),
   recommendedAction: z.string().trim().min(1).max(1000),
+  matchIntelligence: companyRecommendationMatchIntelligenceOutputSchema.nullable().optional(),
   status: z.string().trim().min(1).max(40).nullable().optional(),
   savedAt: z.string().trim().min(1).nullable().optional(),
   searchedAt: z.string().trim().min(1),
@@ -148,6 +199,12 @@ export const companyRecommendationSearchOutputSchema = z.object({
   results: z.array(companyRecommendationItemOutputSchema).max(20),
   searchedAt: z.string().trim().min(1),
 });
+
+export const jobMatchIntelligenceOutputSchema = z.object({
+  plannedQueries: z.array(z.string().trim().min(1).max(300)).max(12),
+  results: z.array(companyRecommendationItemOutputSchema).max(20),
+});
+export type JobMatchIntelligenceOutput = z.output<typeof jobMatchIntelligenceOutputSchema>;
 
 export const resumeCertificateSuggestionItemOutputSchema = z.object({
   certificationSqid: z.string().trim().min(1),

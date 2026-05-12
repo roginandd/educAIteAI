@@ -3,6 +3,7 @@ import { createCertificateParsingRunner, createCertificateSuggestionRunner } fro
 import { createNotesGenerationRunner, createNotesSummarizationRunner } from "../agents/notes/agent";
 import { createPdfExtractionRunner } from "../agents/pdf/agent";
 import {
+  createJobMatchIntelligenceRunner,
   createResumeAnalysisRunner,
   createResumeCertificateSuggestionRunner,
   createResumeJobProfileRunner,
@@ -16,6 +17,7 @@ import {
   createSmartQuizItemGeneratorRunner,
   createSmartQuizRetryVariantRunner,
 } from "../agents/smart-quiz/agent";
+import { createStudyBuddyRunner } from "../agents/study-buddy/agent";
 import { createStudyLoadParsingRunner } from "../agents/studyloads/agent";
 import { AgentService } from "../features/agent/agent.service";
 import { CertificateService } from "../features/certificates/certificate.service";
@@ -28,8 +30,10 @@ import {
   DisabledCodeExecutionSupervisor,
   Judge0CodeExecutionSupervisor,
 } from "../features/smart-quiz/code-execution-supervisor";
+import { SmartQuizGenerationJobRepository } from "../features/smart-quiz/smart-quiz-generation-job.repository";
 import { SmartQuizService } from "../features/smart-quiz/smart-quiz.service";
 import { StudentPerformanceService } from "../features/student-performance/student-performance.service";
+import { StudyBuddyService } from "../features/study-buddy/study-buddy.service";
 import { StudyLoadService } from "../features/studyloads/studyload.service";
 import { env } from "../config/env";
 import { UpstreamHttpClient } from "../shared/http/upstream-http-client";
@@ -48,6 +52,7 @@ export interface AppDependencies {
   resumeService: ResumeService;
   smartQuizService: SmartQuizService;
   studentPerformanceService: StudentPerformanceService;
+  studyBuddyService: StudyBuddyService;
   studyLoadService: StudyLoadService;
 }
 
@@ -62,6 +67,7 @@ export function createDependencies(): AppDependencies {
     pdfExtractionRepository,
   );
   const generatedNoteArtifactRepository = new GeneratedNoteArtifactRepository();
+  const smartQuizGenerationJobRepository = new SmartQuizGenerationJobRepository();
   const publicWebSearchService = new DuckDuckGoPublicWebSearchService();
   const codeExecutionSupervisor = env.JUDGE0_API_BASE_URL
     ? new Judge0CodeExecutionSupervisor({
@@ -96,6 +102,7 @@ export function createDependencies(): AppDependencies {
     createResumeCertificateSuggestionRunner(),
     createResumeJobProfileRunner(),
     createResumeTailoringRunner(),
+    createJobMatchIntelligenceRunner(),
     upstreamHttpClient,
     structuredAgentRunnerService,
     publicWebSearchService,
@@ -107,10 +114,11 @@ export function createDependencies(): AppDependencies {
     createSmartQuizCodeFeedbackRunner(),
     createSmartQuizFlowchartEvaluatorRunner(),
     createSmartQuizRetryVariantRunner(),
-    createPdfExtractionRunner(),
+    createPdfExtractionRunner(env.GOOGLE_GENAI_SMART_QUIZ_PDF_MODEL ?? env.GOOGLE_GENAI_FLASH_MODEL),
     structuredAgentRunnerService,
     codeExecutionSupervisor,
     pdfProcessingService,
+    smartQuizGenerationJobRepository,
   );
   const studyLoadService = new StudyLoadService(
     createStudyLoadParsingRunner(),
@@ -118,11 +126,16 @@ export function createDependencies(): AppDependencies {
     pdfProcessingService,
     pdfExtractionService,
   );
+  const studyBuddyService = new StudyBuddyService(
+    createStudyBuddyRunner(),
+    structuredAgentRunnerService,
+  );
   const onboardingService = new OnboardingService(studyLoadService, upstreamHttpClient);
   const agentService = new AgentService({
     flashcardService,
     noteService,
     resumeService,
+    studyBuddyService,
     studyLoadService,
   });
 
@@ -135,6 +148,7 @@ export function createDependencies(): AppDependencies {
     resumeService,
     smartQuizService,
     studentPerformanceService,
+    studyBuddyService,
     studyLoadService,
   };
 }

@@ -1,7 +1,7 @@
 import type { Content } from "@google/genai";
 import { isFinalResponse, stringifyContent, type Runner } from "@google/adk";
 
-import { performanceSummaryAiOutputSchema } from "../flashcards/flashcard.dto";
+import { performanceSummaryAiOutputSchema, type PerformanceSummaryAiOutput } from "../flashcards/flashcard.dto";
 import {
   studentCoursePerformanceSummaryEvaluationContextResponseSchema,
   studentOverallPerformanceSummaryEvaluationContextResponseSchema,
@@ -33,10 +33,15 @@ export class StudentPerformanceService {
       | StudentCoursePerformanceSummaryEvaluationContextResponse
       | StudentOverallPerformanceSummaryEvaluationContextResponse,
   ) {
+    const insufficientReason = getInsufficientPerformanceSummaryReason(summaryType, evaluationContext);
+    if (insufficientReason) {
+      return buildInsufficientPerformanceSummary(insufficientReason);
+    }
+
     const finalResponseText = await this.runPerformanceSummaryAgent(summaryType, evaluationContext);
     const parsedJson = parseJson(finalResponseText, "Performance summary agent returned invalid JSON.");
 
-    return performanceSummaryAiOutputSchema.parse(parsedJson);
+    return normalizePerformanceSummaryAiOutput(performanceSummaryAiOutputSchema.parse(parsedJson));
   }
 
   private async runPerformanceSummaryAgent(
@@ -102,14 +107,18 @@ function buildPerformanceSummaryPrompt(
   return [
     `Evaluate the student's ${summaryType} performance summary and produce persisted AI summary text.`,
     "Return only JSON.",
-    'Return exactly this shape: {"aiStatus":"...","aiInsight":"...","improvementSuggestion":"..."}',
+    'Return exactly this shape: {"aiStatus":"...","aiInsight":"...","improvementSuggestion":"...","insufficientReason":null}',
+    'Use null for aiInsight and improvementSuggestion only when aiStatus is "InsufficientSignal" and no valid non-zero evidence exists.',
+    'When returning null insight fields, include "insufficientReason" with a short reason.',
     "Use only these aiStatus values: Pending, Completed, Failed, InsufficientSignal",
     "Rules:",
     "- Use only the supplied summary context.",
     "- Do not invent student behavior, trends, or course details not present in the input.",
+    "- Ignore candidate courses or flashcards whose score signals are all zero.",
     "- aiInsight must be one concise grounded sentence.",
     "- improvementSuggestion must be one concrete study action.",
-    "- If the context is sparse, use InsufficientSignal.",
+    "- If no valid non-zero score evidence exists, use InsufficientSignal with null aiInsight and null improvementSuggestion.",
+    "- If the context is sparse but has non-zero score evidence, use conservative wording.",
     summaryType === "course"
       ? "- Focus on this course's current strengths, risks, and next best action."
       : "- Focus on the cross-course pattern and prioritization across the student's courses.",
@@ -135,7 +144,7 @@ function serializePerformanceSummaryContext(
         ...context.summary,
         lastComputedAt: context.summary.lastComputedAt.toISOString(),
       },
-      topRiskFlashcards: context.topRiskFlashcards.slice(0, 5).map((flashcard) => ({
+      topRiskFlashcards: context.topRiskFlashcards.filter(hasNonZeroFlashcardSignal).slice(0, 5).map((flashcard) => ({
         flashcardSqid: flashcard.flashcardSqid,
         question: flashcard.question,
         masteryLevel: flashcard.masteryLevel,
@@ -143,6 +152,7 @@ function serializePerformanceSummaryContext(
         retentionScore: flashcard.retentionScore,
         riskLevel: flashcard.riskLevel,
       })),
+      skippedZeroScoreFlashcardCount: context.topRiskFlashcards.filter((flashcard) => !hasNonZeroFlashcardSignal(flashcard)).length,
     };
   }
 
@@ -152,14 +162,108 @@ function serializePerformanceSummaryContext(
       ...context.summary,
       lastComputedAt: context.summary.lastComputedAt.toISOString(),
     },
-    courseBreakdown: context.courseBreakdown.slice(0, 5).map((course) => ({
+    courseBreakdown: context.courseBreakdown.filter(hasNonZeroCourseBreakdownSignal).slice(0, 5).map((course) => ({
       studentCourseSqid: course.studentCourseSqid,
       courseName: course.courseName,
       edpCode: course.edpCode,
+      trackedFlashcardsCount: course.trackedFlashcardsCount,
+      masteredFlashcardsCount: course.masteredFlashcardsCount,
+      flashcardAccuracyRate: course.flashcardAccuracyRate,
+      learningRetentionRate: course.learningRetentionRate,
       overallPerformanceScore: course.overallPerformanceScore,
       confidenceScore: course.confidenceScore,
       riskLevel: course.riskLevel,
       aiInsight: course.aiInsight,
     })),
+    skippedZeroScoreCourseCount: context.courseBreakdown.filter((course) => !hasNonZeroCourseBreakdownSignal(course)).length,
   };
+}
+
+function normalizePerformanceSummaryAiOutput(output: PerformanceSummaryAiOutput): PerformanceSummaryAiOutput {
+  if (output.aiStatus !== "InsufficientSignal" && (!output.aiInsight?.trim() || !output.improvementSuggestion?.trim())) {
+    throw new BadGatewayError("Performance summary agent returned empty insight text for a sufficient signal.");
+  }
+
+  if (output.aiStatus === "InsufficientSignal" && !output.aiInsight && !output.improvementSuggestion) {
+    return performanceSummaryAiOutputSchema.parse({
+      ...output,
+      insufficientReason: output.insufficientReason ?? "Insufficient non-zero performance data.",
+    });
+  }
+
+  return output;
+}
+
+function buildInsufficientPerformanceSummary(insufficientReason: string): PerformanceSummaryAiOutput {
+  return performanceSummaryAiOutputSchema.parse({
+    aiStatus: "InsufficientSignal",
+    aiInsight: null,
+    improvementSuggestion: null,
+    insufficientReason,
+  });
+}
+
+function getInsufficientPerformanceSummaryReason(
+  summaryType: "course" | "overall",
+  evaluationContext:
+    | StudentCoursePerformanceSummaryEvaluationContextResponse
+    | StudentOverallPerformanceSummaryEvaluationContextResponse,
+): string | null {
+  if (summaryType === "course") {
+    const context = evaluationContext as StudentCoursePerformanceSummaryEvaluationContextResponse;
+    if (hasNonZeroSummarySignal(context.summary) || context.topRiskFlashcards.some(hasNonZeroFlashcardSignal)) {
+      return null;
+    }
+
+    return "No non-zero course performance or flashcard risk score is available yet.";
+  }
+
+  const context = evaluationContext as StudentOverallPerformanceSummaryEvaluationContextResponse;
+  if (hasNonZeroSummarySignal(context.summary) || context.courseBreakdown.some(hasNonZeroCourseBreakdownSignal)) {
+    return null;
+  }
+
+  return "No non-zero overall performance or course breakdown score is available yet.";
+}
+
+function hasNonZeroSummarySignal(summary: {
+  flashcardAccuracyRate?: number;
+  learningRetentionRate?: number;
+  confidenceScore?: number;
+  overallPerformanceScore?: number;
+}): boolean {
+  return [
+    summary.flashcardAccuracyRate,
+    summary.learningRetentionRate,
+    summary.confidenceScore,
+    summary.overallPerformanceScore,
+  ].some(isPositiveFiniteNumber);
+}
+
+function hasNonZeroFlashcardSignal(flashcard: {
+  confidenceScore: number;
+  retentionScore: number;
+}): boolean {
+  return [
+    flashcard.confidenceScore,
+    flashcard.retentionScore,
+  ].some(isPositiveFiniteNumber);
+}
+
+function hasNonZeroCourseBreakdownSignal(course: {
+  flashcardAccuracyRate: number;
+  learningRetentionRate: number;
+  confidenceScore: number;
+  overallPerformanceScore: number;
+}): boolean {
+  return [
+    course.flashcardAccuracyRate,
+    course.learningRetentionRate,
+    course.confidenceScore,
+    course.overallPerformanceScore,
+  ].some(isPositiveFiniteNumber);
+}
+
+function isPositiveFiniteNumber(value: number | undefined): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }

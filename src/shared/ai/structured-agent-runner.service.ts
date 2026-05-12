@@ -63,7 +63,7 @@ export class StructuredAgentRunnerService {
       }
 
       if (Object.hasOwn(stateDelta, input.outputKey) && stateDelta[input.outputKey] !== undefined) {
-        return JSON.stringify(stateDelta[input.outputKey]);
+        return serializeStructuredOutputValue(stateDelta[input.outputKey]);
       }
 
       const content = stringifyContent(event).trim();
@@ -96,9 +96,17 @@ export class StructuredAgentRunnerService {
   }
 }
 
+function serializeStructuredOutputValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  return JSON.stringify(value);
+}
+
 function parseJson(value: string, errorMessage: string, outputKey: string, userId: string): unknown {
   try {
-    return JSON.parse(value) as unknown;
+    return unwrapStringifiedJson(JSON.parse(value) as unknown);
   } catch {
     console.error("[StructuredAgentRunnerService] Invalid JSON response", {
       outputKey,
@@ -110,6 +118,23 @@ function parseJson(value: string, errorMessage: string, outputKey: string, userI
       "RUNNER_INVALID_JSON",
       502,
     );
+  }
+}
+
+function unwrapStringifiedJson(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
   }
 }
 
@@ -168,6 +193,7 @@ function normalizeSmartQuizContextClassificationOutput(value: unknown): unknown 
   return {
     ...value,
     inferredDomain: normalizeLearningDomain(value.inferredDomain),
+    inferredTechnicalLanguage: normalizeTechnicalLanguage(value.inferredTechnicalLanguage),
     recommendedItemTypes: Array.isArray(value.recommendedItemTypes)
       ? value.recommendedItemTypes.map((itemType) => normalizeItemType(itemType))
       : value.recommendedItemTypes,
@@ -187,19 +213,57 @@ function normalizeSmartQuizDraft(value: unknown): unknown {
     value.technicalLanguage,
   );
   const normalizedVisibleTestCases = normalizeDraftVisibleTestCases(value.visibleTestCases);
+  const normalizedHiddenTestCases = normalizeDraftVisibleTestCases(value.hiddenTestCases);
 
   return {
     ...value,
     itemType: normalizeItemType(value.itemType),
     cognitiveSkill: normalizeCognitiveSkill(value.cognitiveSkill),
     learningDomain: normalizeLearningDomain(value.learningDomain),
+    technicalLanguage: normalizeTechnicalLanguage(value.technicalLanguage),
     answeringGuidance: normalizeDraftAnsweringGuidance(value.answeringGuidance),
     options: normalizedOptions ?? value.options,
     correctOptionIds: normalizedCorrectOptionIds ?? value.correctOptionIds,
     rubricCriteria: normalizedRubricCriteria ?? value.rubricCriteria,
     starterCodeByLanguage: normalizedStarterCodeByLanguage ?? value.starterCodeByLanguage,
     visibleTestCases: normalizedVisibleTestCases ?? value.visibleTestCases,
+    hiddenTestCases: normalizedHiddenTestCases ?? value.hiddenTestCases,
   };
+}
+
+function normalizeTechnicalLanguage(value: unknown): string {
+  const raw = readString(value);
+  if (!raw) {
+    return "";
+  }
+
+  const normalized = raw.toLowerCase();
+  const aliases: Array<[RegExp, string]> = [
+    [/\bjavascript\b|\bnode(?:\.js)?\b|\becmascript\b|\bjs\b/, "JavaScript"],
+    [/\btypescript\b|\bts\b/, "TypeScript"],
+    [/\bpython\b|\bpython\s*3\b|\bpy\b/, "Python"],
+    [/\bc#\b|\bcsharp\b|\bc sharp\b/, "C#"],
+    [/\bc\+\+\b|\bcpp\b/, "C++"],
+    [/\bc\b/, "C"],
+    [/\bsql\b|\bpostgres(?:ql)?\b|\bmysql\b|\bsqlite\b/, "SQL"],
+    [/\bhtml\b/, "HTML"],
+    [/\bcss\b/, "CSS"],
+    [/\bjava\b/, "Java"],
+  ];
+
+  for (const [pattern, label] of aliases) {
+    if (pattern.test(normalized)) {
+      return label;
+    }
+  }
+
+  const firstPhrase = raw
+    .replace(/[`*_#>\[\](){}]/g, " ")
+    .split(/[.;:\n\r]/)[0]
+    ?.trim()
+    .replace(/\s+/g, " ");
+
+  return firstPhrase ? firstPhrase.slice(0, 80).trim() : "";
 }
 
 function normalizeDraftAnsweringGuidance(value: unknown): unknown {
@@ -295,7 +359,7 @@ function normalizeDraftStarterCodeByLanguage(value: unknown, technicalLanguage: 
 
 function normalizeDraftVisibleTestCases(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return value;
+    return value.map((entry, index) => normalizeDraftVisibleTestCaseEntry(entry, index));
   }
 
   if (typeof value !== "string" || !value.trim()) {
@@ -312,25 +376,62 @@ function normalizeDraftVisibleTestCases(value: unknown): unknown {
     .split(/\n{2,}/)
     .map((entry) => entry.trim())
     .filter(Boolean)
-    .map((entry) => {
-      const [inputPart, expectedOutputPart, ...rest] = entry
-        .split(/\s*(?:=>|->|\|)\s*/)
-        .map((part) => part.trim())
-        .filter(Boolean);
+    .map((entry, index) => normalizeDraftVisibleTestCaseEntry(entry, index));
+}
 
-      if (!inputPart || !expectedOutputPart) {
-        return {
-          input: entry,
-          expectedOutput: "See explanation",
-        };
-      }
+function normalizeDraftVisibleTestCaseEntry(value: unknown, index: number): unknown {
+  if (typeof value === "string") {
+    const parsed = parseDraftVisibleTestCaseText(value, index);
+    return parsed ?? value;
+  }
 
-      return {
-        input: inputPart,
-        expectedOutput: expectedOutputPart,
-        ...(rest.length > 0 ? { explanation: rest.join(" | ") } : {}),
-      };
-    });
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const input = readString(value.input ?? value.stdin ?? value.args);
+  const expectedOutput = readString(value.expectedOutput ?? value.expected_output ?? value.output);
+  if (!input || !expectedOutput) {
+    return value;
+  }
+
+  return {
+    ...value,
+    name: readString(value.name ?? value.label) ?? `Test ${index + 1}`,
+    input,
+    expectedOutput,
+  };
+}
+
+function parseDraftVisibleTestCaseText(value: string, index: number): { name: string; input: string; expectedOutput: string } | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const labeledMatch = trimmed.match(/input\s*:\s*([\s\S]+?)\s*(?:expected(?:\s*output)?|output)\s*:\s*([\s\S]+)/i);
+  if (labeledMatch) {
+    const input = labeledMatch[1]?.trim();
+    const expectedOutput = labeledMatch[2]?.trim();
+    return input && expectedOutput
+      ? { name: `Test ${index + 1}`, input, expectedOutput }
+      : null;
+  }
+
+  for (const separator of ["=>", "->", "|"]) {
+    const separatorIndex = trimmed.indexOf(separator);
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const input = trimmed.slice(0, separatorIndex).trim();
+    const expectedOutput = trimmed.slice(separatorIndex + separator.length).trim();
+    if (input && expectedOutput) {
+      return { name: `Test ${index + 1}`, input, expectedOutput };
+    }
+  }
+
+  return null;
 }
 
 function createRubricCriterion(text: string): { name: string; weight: number; description: string } {

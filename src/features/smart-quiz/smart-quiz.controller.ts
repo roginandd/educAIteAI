@@ -7,6 +7,7 @@ import {
   generateSmartQuizItemsPreviewInputSchema,
   retryVariantInputSchema,
   scoreSmartQuizAnswerInputSchema,
+  smartQuizGenerationJobParamsSchema,
   smartQuizSelectItemTypeInputSchema,
   smartQuizContextClassifyInputSchema,
 } from "./smart-quiz.dto";
@@ -33,9 +34,26 @@ export class SmartQuizController {
     res.status(200).json(result);
   };
 
+  getGenerationJob = async (req: Request, res: Response): Promise<void> => {
+    const params = smartQuizGenerationJobParamsSchema.parse(req.params);
+    const result = await this.smartQuizService.getGenerationJob(params.generationJobSqid);
+    res.status(200).json(result);
+  };
+
+  retryHydration = async (req: Request, res: Response): Promise<void> => {
+    const params = smartQuizGenerationJobParamsSchema.parse(req.params);
+    const result = await this.smartQuizService.retryHydration(params.generationJobSqid);
+    res.status(202).json(result);
+  };
+
   analyzePdfAndGeneratePreview = async (req: Request, res: Response): Promise<void> => {
     const body = analyzePdfAndGenerateSmartQuizPreviewBodySchema.parse(req.body ?? {});
     const result = await this.smartQuizService.analyzePdfAndGeneratePreview(body, req.file);
+    res.status(200).json(result);
+  };
+
+  extractPdfText = async (req: Request, res: Response): Promise<void> => {
+    const result = await this.smartQuizService.extractPdfText(req.file);
     res.status(200).json(result);
   };
 

@@ -26,7 +26,10 @@ export class OnboardingService {
     file: Express.Multer.File | undefined,
   ): Promise<RegisterWithStudyLoadResponse> {
     const parsedInput = registerWithStudyLoadInputSchema.parse(input);
-    const parsedStudyLoad = await this.studyLoadService.parseUploadedStudyLoadPdf(file);
+    const parsedStudyLoad = await this.studyLoadService.parseUploadedStudyLoadPdf(file, {
+      requestKind: "registration-studyload-upload",
+      registeredStudentIdNumber: parsedInput.studentIdNumber,
+    });
     const transaction = new OnboardingCompensatingTransaction();
     let auth: AuthResult | null = null;
 

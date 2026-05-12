@@ -16,22 +16,23 @@ export const resumeTemplateResponseSchema = z.object({
 }).passthrough();
 
 export const resumePersonalDetailsResponseSchema = z.object({
-  resumeSqid: z.string().trim().min(1),
+  resumeSqid: z.string().trim().min(1).optional(),
   firstName: z.string().trim().min(1),
   lastName: z.string().trim().min(1),
   middleName: z.string().trim().min(1).nullable().optional(),
-  email: z.string().trim().min(1),
-  phoneNumber: z.string().trim().min(1),
-  addressLine1: z.string().trim().min(1),
+  email: z.string().trim().min(1).nullable().optional(),
+  phoneNumber: z.string().trim().min(1).nullable().optional(),
+  location: z.string().trim().min(1).nullable().optional(),
+  addressLine1: z.string().trim().min(1).nullable().optional(),
   addressLine2: z.string().trim().min(1).nullable().optional(),
-  city: z.string().trim().min(1),
-  provinceState: z.string().trim().min(1),
-  country: z.string().trim().min(1),
-  postalCode: z.string().trim().min(1),
+  city: z.string().trim().min(1).nullable().optional(),
+  provinceState: z.string().trim().min(1).nullable().optional(),
+  country: z.string().trim().min(1).nullable().optional(),
+  postalCode: z.string().trim().min(1).nullable().optional(),
   linkedInUrl: z.string().trim().min(1).nullable().optional(),
   portfolioUrl: z.string().trim().min(1).nullable().optional(),
-  updatedAt: z.string().trim().min(1),
-});
+  updatedAt: z.string().trim().min(1).optional(),
+}).passthrough();
 
 export const resumeEducationResponseSchema = z.object({
   educationSqid: z.string().trim().min(1),
@@ -85,12 +86,20 @@ export const resumeWithRelationsResponseSchema = z.object({
   targetRole: z.string().trim().min(1).nullable().optional(),
   template: resumeTemplateResponseSchema.nullable().optional(),
   personalDetails: resumePersonalDetailsResponseSchema.nullable().optional(),
+  header: resumePersonalDetailsResponseSchema.nullable().optional(),
   education: z.array(resumeEducationResponseSchema),
-  employmentHistory: z.array(resumeEmploymentHistoryResponseSchema),
+  employmentHistory: z.array(resumeEmploymentHistoryResponseSchema).optional(),
+  experience: z.array(resumeEmploymentHistoryResponseSchema).optional(),
   summary: resumeSummaryResponseSchema.nullable().optional(),
-  certificates: z.array(resumeCertificateItemResponseSchema),
+  certificates: z.array(resumeCertificateItemResponseSchema).optional(),
+  awardsAndCertifications: z.array(resumeCertificateItemResponseSchema).optional(),
   completeness: resumeReviewCompletenessResponseSchema,
-}).passthrough();
+}).passthrough().transform((resume) => ({
+  ...resume,
+  personalDetails: resume.personalDetails ?? resume.header ?? null,
+  employmentHistory: resume.employmentHistory ?? resume.experience ?? [],
+  certificates: resume.certificates ?? resume.awardsAndCertifications ?? [],
+}));
 
 export const analyzeResumeWithRelationsResponseSchema = z.object({
   resume: resumeWithRelationsResponseSchema,

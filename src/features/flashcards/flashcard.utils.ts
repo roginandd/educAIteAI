@@ -185,7 +185,7 @@ export function normalizeDraftForDelivery(
       const existingFunctionSignature = readStringConfig(normalizedValidationConfig, "functionSignature");
       const existingStarterCode = normalizedValidationConfig.starterCodeByLanguage;
       const starterCodeByLanguage = normalizeStarterCodeByLanguage(existingStarterCode, technicalLanguage);
-      const visibleTestCases = normalizeVisibleTestCases(normalizedValidationConfig.visibleTestCases, 5);
+      const visibleTestCases = normalizeVisibleTestCases(normalizedValidationConfig.visibleTestCases);
       if (
         !existingFunctionSignature
         || !starterCodeByLanguage
@@ -212,15 +212,19 @@ export function normalizeDraftForDelivery(
     case "Debugging": {
       const existingBuggyCode = readStringConfig(normalizedValidationConfig, "buggyCode");
       const finalBuggyCode = ensureJudge0ProgramShape(existingBuggyCode || codeSnippet, technicalLanguage);
+      const visibleTestCases = normalizeVisibleTestCases(normalizedValidationConfig.visibleTestCases);
       if (!finalBuggyCode) {
         normalizedDraft = convertToShortAnswerInsteadOfConceptual(normalizedDraft);
         break;
       }
 
       normalizedValidationConfig.buggyCode = finalBuggyCode;
-      normalizedValidationConfig.visibleTestCases = Array.isArray(normalizedValidationConfig.visibleTestCases)
-        ? normalizedValidationConfig.visibleTestCases
-        : [];
+      if (!visibleTestCases) {
+        normalizedDraft = convertToShortAnswerInsteadOfConceptual(normalizedDraft);
+        break;
+      }
+
+      normalizedValidationConfig.visibleTestCases = visibleTestCases;
       break;
     }
   }
@@ -486,22 +490,32 @@ function normalizeStarterCodeByLanguage(value: unknown, technicalLanguage: strin
   return Object.fromEntries(normalizedEntries);
 }
 
-function normalizeVisibleTestCases(value: unknown, minimumCount = 1): unknown[] | null {
+function normalizeVisibleTestCases(value: unknown, minimumCount = 1): Array<{ name: string; input: string; expectedOutput: string; explanation: string }> | null {
   if (!Array.isArray(value) || value.length === 0) {
     return null;
   }
 
-  const concreteTestCases = value.filter((testCase) => {
+  const concreteTestCases = value.flatMap((testCase, index) => {
     if (!isUnknownRecord(testCase)) {
-      return false;
+      return [];
     }
 
+    const name = typeof testCase.name === "string" && testCase.name.trim()
+      ? testCase.name.trim()
+      : typeof testCase.label === "string" && testCase.label.trim()
+        ? testCase.label.trim()
+        : `Test ${index + 1}`;
     const input = typeof testCase.input === "string" ? testCase.input.trim() : "";
     const expectedOutput = typeof testCase.expectedOutput === "string" ? testCase.expectedOutput.trim() : "";
-    return !!input
+    const explanation = typeof testCase.explanation === "string" ? testCase.explanation.trim() : "";
+    const isConcrete = !!input
       && !!expectedOutput
       && !/^(sample|second sample|example)/i.test(input)
       && !/^(sample|expected|example)/i.test(expectedOutput);
+
+    return isConcrete
+      ? [{ name, input, expectedOutput, explanation }]
+      : [];
   });
 
   return concreteTestCases.length >= minimumCount ? concreteTestCases : null;
@@ -876,12 +890,13 @@ function readOptions(value: Record<string, unknown>): Array<{ id: string; text: 
     .filter((option) => option.text.length > 0);
 }
 
-function readVisibleTestCases(value: Record<string, unknown>, key: string): Array<{ input: string; expectedOutput: string; explanation: string }> {
+function readVisibleTestCases(value: Record<string, unknown>, key: string): Array<{ name: string; input: string; expectedOutput: string; explanation: string }> {
   const testCases = Array.isArray(value[key]) ? value[key] : [];
 
   return testCases
     .filter((testCase): testCase is Record<string, unknown> => isRecord(testCase))
-    .map((testCase) => ({
+    .map((testCase, index) => ({
+      name: readString(testCase, "name", readString(testCase, "label", `Test ${index + 1}`)),
       input: readString(testCase, "input"),
       expectedOutput: readString(testCase, "expectedOutput"),
       explanation: readString(testCase, "explanation"),

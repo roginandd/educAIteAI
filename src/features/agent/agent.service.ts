@@ -5,6 +5,7 @@ import { createRootAgentRunner } from "../../agents/root/runtime";
 import type { RootAgentDependencies } from "../../agents/root/agent";
 import { BadGatewayError } from "../../shared/errors/bad-gateway-error";
 import { UnauthorizedError } from "../../shared/errors/unauthorized-error";
+import type { StudyBuddyService } from "../study-buddy/study-buddy.service";
 import {
   agentMessageInputSchema,
   agentTaskInputSchema,
@@ -18,8 +19,12 @@ import {
   type AgentTaskResponse,
 } from "./agent.response";
 
+interface AgentServiceDependencies extends RootAgentDependencies {
+  studyBuddyService: StudyBuddyService;
+}
+
 export class AgentService {
-  constructor(private readonly dependencies: RootAgentDependencies) {}
+  constructor(private readonly dependencies: AgentServiceDependencies) {}
 
   async sendMessage(
     input: AgentMessageInput,
@@ -143,6 +148,11 @@ export class AgentService {
         return agentTaskResponseSchema.parse({
           intent: parsedInput.intent,
           result: await this.dependencies.studyLoadService.parseAndApplyStudyLoadPdf(parsedInput.payload, authHeader),
+        });
+      case "generate_study_focus_chat_reply":
+        return agentTaskResponseSchema.parse({
+          intent: parsedInput.intent,
+          result: await this.dependencies.studyBuddyService.generateReply(parsedInput.payload),
         });
     }
   }

@@ -31,9 +31,28 @@ export const parseAndApplyStudyLoadPdfBodySchema = z.object({
   expiresInMinutes: z.coerce.number().int().min(1).max(1440).default(60),
 });
 
+export const studyLoadAiContextSchema = z.object({
+  studyLoadSqid: z.string().trim().min(1),
+  schoolYearStart: z.coerce.number().int().min(1900).max(9999).optional(),
+  schoolYearEnd: z.coerce.number().int().min(1900).max(9999).optional(),
+  semester: z.union([z.string().trim().min(1), z.coerce.number().int().min(1).max(4)]).optional(),
+  courses: z.array(z.string().trim().min(1)).default([]),
+});
+
+export const authenticatedStudyLoadStudentContextSchema = z.object({
+  studentSqid: z.string().trim().min(1),
+  studentIdNumber: z.string().trim().nullable().optional().transform((value) => value ?? ""),
+  fullName: z.string().trim().nullable().optional().transform((value) => value ?? ""),
+  email: z.string().trim().nullable().optional().transform((value) => value ?? ""),
+  program: z.string().trim().nullable().optional().transform((value) => value ?? ""),
+  semester: z.coerce.number().int().min(1).max(12).nullable().optional().transform((value) => value ?? undefined),
+  studyLoad: studyLoadAiContextSchema.optional(),
+});
+
 export const parseAndApplyStudyLoadPdfInputSchema = z.object({
   studyLoadSqid: z.string().trim().min(1),
   expiresInMinutes: z.coerce.number().int().min(1).max(1440).default(60),
+  authenticatedStudent: authenticatedStudyLoadStudentContextSchema.optional(),
 });
 
 export const uploadAndParseStudyLoadPdfBodySchema = z.object({
@@ -61,6 +80,7 @@ export type ApplyParsedStudyLoadCoursesInput = z.output<typeof applyParsedStudyL
 export type ParseAndApplyStudyLoadPdfParams = z.output<typeof parseAndApplyStudyLoadPdfParamsSchema>;
 export type ParseAndApplyStudyLoadPdfBody = z.output<typeof parseAndApplyStudyLoadPdfBodySchema>;
 export type ParseAndApplyStudyLoadPdfInput = z.output<typeof parseAndApplyStudyLoadPdfInputSchema>;
+export type AuthenticatedStudyLoadStudentContext = z.output<typeof authenticatedStudyLoadStudentContextSchema>;
 export type UploadAndParseStudyLoadPdfBody = z.output<typeof uploadAndParseStudyLoadPdfBodySchema>;
 export type UploadAndParseStudyLoadPdfInput = z.output<typeof uploadAndParseStudyLoadPdfInputSchema>;
 export type StudyLoadCourseParsingOutput = z.output<typeof studyLoadCourseParsingOutputSchema>;

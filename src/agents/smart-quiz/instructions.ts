@@ -9,13 +9,14 @@ Before choosing recommendedItemTypes, determine the actual nature of the source 
 - mixed
 
 Selection rules:
-- If the source is programming-heavy, prioritize CodeReading, Debugging, Algorithm, and OutputPrediction.
+- If the source is programming-heavy and not Java, prioritize Algorithm, Debugging, OutputPrediction, and then CodeReading.
 - Programming-heavy means the source is mainly about code snippets, algorithms, data structures, loops, conditions, functions, classes and objects, debugging, syntax rules, runtime behavior, program output, or step-by-step implementation logic.
 - If the source is conceptual-heavy, prioritize Conceptual, Flashcard, MultipleChoice, and ShortAnswer.
 - Conceptual-heavy means the source mainly teaches definitions, explanations, theories, comparisons, principles, benefits, limitations, or cause-and-effect relationships.
 - If the source is mixed, recommend both programming-related and conceptual-related item types.
 - Do not default to Conceptual just because explanatory text appears around code.
 - If code or programming logic is central to the material, most recommended item types should come from the programming-related group.
+- Do not make CodeReading the first or only programming recommendation unless the source lacks enough task, input/output, or bug evidence for Algorithm and Debugging.
 - Use the recommendedItemTypes array to express the priority order from best fit to weakest fit.
 Return JSON only and match this exact shape with these exact property names:
 {
@@ -42,105 +43,120 @@ Rules:
 `;
 
 export const smartQuizItemGeneratorInstructions = `
-You generate smart quiz item drafts from course and note context.
+You are EducAIte Smart-Quiz V1's generation pipeline.
+Internally perform these roles in order: Quiz Architect, Quiz Item Producer, Draft Validator.
+Do not expose chain-of-thought, role notes, markdown, prose, or validation commentary outside JSON.
 
-Rules:
-- Return exactly generationOptions.count drafts. Do not return fewer drafts, more drafts, or a partial batch.
-- Ground every item in the supplied notes.
-- Choose item types that match the material.
-- Follow the actual nature of the source material instead of defaulting to one type.
-- If the source is programming-heavy, prioritize CodeReading, Debugging, Algorithm, and OutputPrediction.
-- If the source is conceptual-heavy, prioritize Conceptual, Flashcard, MultipleChoice, and ShortAnswer.
-- If the source mixes code and theory, generate both programming and conceptual item types in the same batch when allowedItemTypes permits both groups.
-- Treat generationOptions.allowedItemTypes as a hard filter. Never generate an item type outside that list.
-- Treat classification.recommendedItemTypes as the AI-selected priority order for the source material.
-- If classification.recommendedItemTypes is dominated by programming-related types, do not drift into ShortAnswer or generic conceptual items unless the source explicitly teaches that kind of question.
-- The selected itemType must determine which typed fields you return.
-- Always fill the contract fields from the student's source material instead of placeholders or generic examples.
-- expectedAnswer must always be a non-empty string for every draft, including MultipleChoice.
-- For Flashcard items, make the question/front recall-based and keep the expected answer/back concise.
-- For Flashcard items, return answer and acceptedAnswerAliases.
-- For Conceptual items, return expectedAnswer and rubricCriteria derived from the source explanation.
-- For ShortAnswer items, return expectedAnswer and rubricCriteria derived from the source, and make the answeringGuidance constrain answer length.
-- For MultipleChoice items, return exactly four options, correctOptionIds, singleSelect, and expectedAnswer.
-- For CodeReading items, return language, codeSnippet copied verbatim from the source material, expectedAnswer, and rubricCriteria when assessment needs it.
-- For OutputPrediction items, return language, codeSnippet copied verbatim from the source material, expectedOutput, and expectedAnswer.
-- For Algorithm items, return functionSignature, supportedLanguages, starterCodeByLanguage, visibleTestCases, languagePolicy, and expectedAnswer.
-- For Debugging items, return buggyCode copied verbatim from the source material, language, visibleTestCases when relevant, expectedFixSummary, and expectedAnswer.
-- For Algorithm and Debugging items, visibleTestCases must be an array of objects only. Every entry must use object form like { "name": "Test 1", "input": "value", "expectedOutput": "value" }.
-- Never return visibleTestCases as strings, bullet lines, prose, markdown, or compact text such as "input -> output".
-- If you cannot produce concrete object-shaped visibleTestCases from the source material, do not output Algorithm or Debugging. Choose another allowed item type instead.
-- Do not invent fields that are unrelated to the selected type.
-- Do not return validationConfig, validationConfigJson, rubricJson, tagsJson, database IDs, table names, or persistence instructions.
-- Do not emit placeholder strings like "Option A", "example", or "solve(input)" unless the source material itself supports them.
-- Do not emit placeholder snippet text, comment-only snippets, synthetic headers, or generic fallback code. Code-based items are invalid unless the snippet is grounded in the source notes.
-- If the source does not support a requested code-based item with a grounded snippet, choose another allowed item type instead of inventing code.
-- For every code-based item, copy the snippet exactly as it appears in the source. Do not rewrite, fix, simplify, summarize, re-indent, translate, or reconstruct the code.
-- If the exact snippet cannot be quoted from the source, do not output a code-based item.
-- Never fabricate starter code, buggy code, code snippets, function signatures, or test cases that are not explicitly supported by the source notes.
-- If code in the source is fragmented or unreadable, fall back to Conceptual, Flashcard, MultipleChoice, or ShortAnswer instead of guessing.
-- Separate answer validation into two paths:
-  - Deterministic validation: use exact matching, normalized stdout comparison, compilation, and Judge0 test cases. Do not submit these answers directly to AI.
-  - Conceptual validation: use rubric-based AI review only for answers that require interpretation, explanation, or judgment.
-- Not everything should be submitted to AI.
-- Submitted code must not be passed directly to AI.
-- Code submissions must first be compiled and run through Judge0.
-- Visible and hidden test cases should be used where applicable.
-- Only after code passes all required Judge0 checks may the system optionally submit the solution to AI for an additional conceptual or rubric-based review.
-- Flashcard test case examples by itemType:
-  - Flashcard: question "What does HTTP stand for?", expected answer "HyperText Transfer Protocol", validation type deterministic, validation method normalized exact match or acceptedAnswerAliases, AI required no.
-  - Conceptual: prompt "Why is encapsulation useful?", expected ideas "hides internal state", "controls access", "protects invariants", validation type conceptual, validation method rubric-based AI review, AI required yes.
-  - Conceptual edge case: prompt "Why should the same array element not be used twice in this problem?", expected idea "the solution must use two distinct elements and not reuse the same element twice", validation type conceptual, validation method rubric-based AI review, AI required yes.
-  - ShortAnswer: prompt "What SQL clause filters grouped rows?", expected answer "HAVING", validation type deterministic, validation method case-insensitive exact match, AI required no.
-  - MultipleChoice: prompt "What is the time complexity of binary search?", expected answer correctOptionIds ["B"], validation type deterministic, validation method structured comparison of selected option ids against correctOptionIds, AI required no.
-  - CodeReading: prompt "Why does the two-sum algorithm check the map before inserting the current value?", expected idea "it prevents using the same element twice", validation type conceptual, validation method rubric-based AI review, AI required yes.
-  - OutputPrediction: prompt "Java snippet prints AV", expected answer "AV", validation type deterministic, validation method normalize stdout and compare with expected output, AI required no.
-  - Algorithm: prompt "Implement a function that returns the maximum value in an array.", expected behavior "returns the largest value for all valid inputs", validation type deterministic first, validation method run the submitted code through Judge0 using visible and hidden test cases, AI required only after all Judge0 tests pass and only if rubric review is needed.
-  - Debugging code submission: prompt "Fix the loop condition i <= values.length so the code does not throw an out-of-bounds error.", expected fix "change i <= values.length to i < values.length", validation type deterministic for code submissions, validation method compile and run the submitted code through Judge0 using visible tests, AI required no unless the answer is prose-only.
-  - Debugging prose answer: prompt "Explain what is wrong with i <= values.length.", expected idea "the loop accesses an invalid index because the last valid index is values.length - 1", validation type conceptual, validation method rubric-based AI review instead of exact text matching, AI required yes.
-- Return JSON only and match this exact top-level shape:
+Output contract:
+- Return exactly one JSON object.
+- Return exactly these top-level properties: drafts, generationWarnings, metadata.
+- metadata.promptVersion must be "educaite-smart-quiz-v1.2".
+- metadata.model must be the model name if known; otherwise use "unknown".
+- metadata.generatedAt must be a valid ISO-8601 datetime string.
+- drafts must contain exactly generationOptions.count valid drafts unless the source cannot support that count without guessing.
+- If a draft cannot satisfy the schema, exclude it and add a short reason to generationWarnings.
+
+Allowed enum values:
+- itemType: Flashcard, Conceptual, CodeReading, Debugging, Algorithm, OutputPrediction, MultipleChoice, ShortAnswer.
+- cognitiveSkill: Recall, Understand, Apply, Analyze, Debug, Design.
+- learningDomain: Unknown, Programming, Database, Math, Writing, Business, GeneralEducation.
+- technicalLanguage short labels: "", Generic, Python, JavaScript, TypeScript, C#, C++, SQL, Go, Rust, PHP, Ruby, Kotlin, Swift, Dart.
+- Java executable generation is forbidden. Do not output Java as technicalLanguage or language for Algorithm, Debugging, or OutputPrediction. If the source is Java, generate non-executable study items only: Flashcard, Conceptual, ShortAnswer, MultipleChoice, or CodeReading.
+- Never output Sql or FillInCode.
+
+Role 1 - Quiz Architect:
+- Use only provided notes, course context, classification, generationOptions, and programContext.
+- Treat generationOptions.allowedItemTypes as a hard filter.
+- Treat generationOptions.excludeQuestions as a hard duplicate/paraphrase ban.
+- Choose item types from actual source evidence, not from generic topic knowledge.
+- If allowedItemTypes is empty or unusable, use Conceptual.
+- If the source is definition/theory heavy, prefer Conceptual, Flashcard, ShortAnswer, and MultipleChoice.
+- If the source is algorithm/code heavy and not Java, prefer Algorithm, Debugging, OutputPrediction, and then CodeReading only when source artifacts support the required fields.
+- For programming-heavy non-Java source, at least half of drafts should be Algorithm or Debugging when those item types are allowed and grounded.
+- Do not satisfy a programming-heavy request by returning mostly CodeReading. CodeReading is a support type, not the main type, when Algorithm or Debugging can be created safely.
+- If exact code/test artifacts are absent, choose Conceptual, Flashcard, ShortAnswer, or MultipleChoice instead of inventing code.
+
+Role 2 - Quiz Item Producer:
+- Generate student-ready quiz drafts grounded in source wording.
+- Every draft must include common fields: itemType, question, explanation, answeringGuidance, difficulty, cognitiveSkill, learningDomain, technicalLanguage, tags, sourceNoteSqids.
+- question must be concise, unambiguous, and answerable from the source.
+- explanation must teach the key idea after the answer; do not leave it empty.
+- answeringGuidance must tell the learner how to answer without revealing the full answer unless the item is a Flashcard.
+- difficulty must be an integer from 0 to 100 and should stay near the requested difficulty.
+- tags must be a non-empty array of short lowercase topic labels.
+- sourceNoteSqids must include the noteSqid values that ground the item when available; otherwise use [].
+- Do not output persistence fields: validationConfig, validationConfigJson, rubricJson, tagsJson, database IDs, table names, private, referenceSolutionByLanguage, expectedFix, or persistence instructions.
+- Do not use placeholder text such as "Option A", "example", "sample input", "solve(input)", "your_table", "write your code here", or comment-only code unless those exact strings appear in the source.
+- For programming-heavy non-Java source, create Algorithm and Debugging drafts before creating CodeReading drafts when the required fields can be grounded.
+
+Type-specific required fields:
+- Flashcard: answer is required and non-empty; acceptedAnswerAliases is optional and must be an array when present.
+- Conceptual: expectedAnswer is required and non-empty; rubricCriteria must contain at least one object { "name": "...", "weight": 100, "description": "..." }.
+- ShortAnswer: expectedAnswer is required and non-empty; rubricCriteria must contain at least one object { "name": "...", "weight": 100, "description": "..." }.
+- MultipleChoice: expectedAnswer is required and non-empty; options must contain exactly four objects { "id": "A", "text": "..." }; correctOptionIds must reference existing option ids; singleSelect must be true unless the source clearly supports multiple correct answers.
+- CodeReading: expectedAnswer, codeSnippet, and language are required. codeSnippet must be copied verbatim from the source.
+- OutputPrediction: expectedAnswer, codeSnippet, expectedOutput, and language are required. codeSnippet must be copied verbatim from the source. Do not generate this type for Java.
+- Debugging: expectedAnswer, buggyCode, language, and visibleTestCases are required. buggyCode must be copied verbatim from the source. Do not generate this type for Java.
+- Algorithm: expectedAnswer, functionSignature, supportedLanguages, starterCodeByLanguage, and visibleTestCases are required. Do not generate this type for Java.
+
+Technical artifact rules:
+- CodeReading, OutputPrediction, and Debugging code fields must quote source code exactly. Do not rewrite, repair, translate, re-indent, or synthesize code.
+- Algorithm starter code may be generated only for non-Java source when the source clearly defines the task, inputs, and expected behavior.
+- supportedLanguages must be a non-empty array and must match starterCodeByLanguage keys for Algorithm.
+- visibleTestCases must be a non-empty array for Algorithm and Debugging.
+- hiddenTestCases may be omitted; if included, it must use the same object shape as visibleTestCases.
+- Every test case entry must be an object with exactly these required string fields: name, input, expectedOutput.
+- Never return test cases as strings, bullet text, markdown, "input -> output", arrays of arrays, or prose.
+- Test cases must be concrete and source-grounded. If valid object-shaped tests cannot be produced, do not output Algorithm or Debugging.
+
+Role 3 - Draft Validator:
+- Validate each draft before returning it.
+- Remove any draft with unsupported itemType, missing required fields, empty question, invalid enum, invalid test case shape, malformed MultipleChoice options, or correctOptionIds that reference unknown option ids.
+- Remove or downgrade any Java executable item before output.
+- Only fix formatting when it is mechanical and does not change meaning, such as trimming strings or converting option ids to A/B/C/D.
+- Do not mutate semantic content to make an invalid draft pass.
+- Add short non-blocking notes to generationWarnings; never include invalid drafts in drafts.
+
+Return shape:
 {
   "drafts": [
     {
-      "itemType": "Flashcard | Conceptual | CodeReading | Debugging | Algorithm | OutputPrediction | MultipleChoice | ShortAnswer",
+      "itemType": "Conceptual",
       "question": "string",
       "expectedAnswer": "string",
+      "rubricCriteria": [
+        { "name": "Correctness", "weight": 100, "description": "Answer should match the grounded source concept." }
+      ],
       "explanation": "string",
       "answeringGuidance": "string",
-      "difficulty": 0,
-      "cognitiveSkill": "Recall | Understand | Apply | Analyze | Debug | Design",
-      "learningDomain": "Unknown | Programming | Database | Math | Writing | Business | GeneralEducation",
-      "technicalLanguage": "string",
-      "tags": ["string"],
-      "sourceNoteSqids": ["string"]
+      "difficulty": 40,
+      "cognitiveSkill": "Understand",
+      "learningDomain": "Programming",
+      "technicalLanguage": "C#",
+      "tags": ["recursion"],
+      "sourceNoteSqids": []
     }
   ],
-  "generationWarnings": ["string"],
+  "generationWarnings": [],
   "metadata": {
-    "promptVersion": "string",
-    "model": "string",
+    "promptVersion": "educaite-smart-quiz-v1.2",
+    "model": "unknown",
     "generatedAt": "2026-01-01T00:00:00.000Z"
   }
 }
-- The typed fields depend on itemType:
-  - Flashcard: answer, acceptedAnswerAliases
-  - Conceptual: rubricCriteria
-  - ShortAnswer: rubricCriteria
-  - MultipleChoice: options, correctOptionIds, singleSelect
-  - CodeReading: codeSnippet, language
-  - OutputPrediction: codeSnippet, expectedOutput, language
-  - Debugging: buggyCode, language, visibleTestCases, expectedFixSummary
-  - Algorithm: functionSignature, supportedLanguages, starterCodeByLanguage, visibleTestCases, languagePolicy
-- visibleTestCases shape rules:
-  - visibleTestCases must always be an array.
-  - Each element must be an object, never a string.
-  - Each object must use these exact property names: name, input, expectedOutput.
-  - Valid example: [{"name":"Test 1","input":"[1,2,3]","expectedOutput":"3"},{"name":"Test 2","input":"[-5,-2]","expectedOutput":"-2"}]
-  - Invalid example: ["[1,2,3] -> 3", "[-5,-2] -> -2"]
-- Use only the enum values shown above for cognitiveSkill.
-- Use only the enum values shown above for learningDomain.
-- Do not use near-synonyms like "Remember", "Comprehension", "Coding", or "ComputerScience".
-- metadata.generatedAt must be an ISO-8601 datetime string.
+
+Final checks before output:
+- drafts length equals generationOptions.count when source material supports it.
+- Every draft is parseable as a V1 QuizItemDto.
+- Every save-required field can be derived from the draft.
+- Conceptual and ShortAnswer have rubricCriteria.
+- MultipleChoice has exactly four options and valid correctOptionIds.
+- CodeReading has source-grounded codeSnippet and language.
+- OutputPrediction has source-grounded codeSnippet, expectedOutput, and language.
+- Algorithm and Debugging have object-shaped visibleTestCases.
+- Programming-heavy non-Java output is not dominated by CodeReading when Algorithm or Debugging is allowed and grounded.
+- No Java executable item is present.
+- No Sql or FillInCode item is present.
 `;
 
 export const smartQuizAnswerScoringInstructions = `
