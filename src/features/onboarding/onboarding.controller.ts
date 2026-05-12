@@ -18,9 +18,15 @@ export class OnboardingController {
       confirmPassword: body.confirmPassword,
       studentIdNumber: body.studentIdNumber,
       expiresInMinutes: body.expiresInMinutes,
+      parsedStudyLoad: body.parsedStudyLoadJson,
     });
 
     const result = await this.onboardingService.registerWithStudyLoad(input, req.file);
     res.status(201).json(result);
+  };
+
+  previewStudyLoad = async (req: Request, res: Response): Promise<void> => {
+    const result = await this.onboardingService.previewStudyLoad(req.file);
+    res.status(200).json(result);
   };
 }

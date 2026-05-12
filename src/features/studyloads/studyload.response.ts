@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { parsedStudyLoadCourseItemSchema, studyLoadSemesterSchema } from "./studyload.dto";
+import {
+  parsedStudyLoadCourseItemSchema,
+  registrationStudyLoadStudentSuggestionSchema,
+  studyLoadSemesterSchema,
+} from "./studyload.dto";
 
 export const studyLoadCourseApiResponseSchema = z.object({
   courseId: z.number().int().nonnegative(),
@@ -58,9 +62,21 @@ export const uploadAndParseStudyLoadPdfResponseSchema = z.object({
   parseResult: parseAndApplyStudyLoadPdfResponseSchema,
 });
 
+export const registrationStudyLoadPreviewResponseSchema = z.object({
+  suggestedStudent: registrationStudyLoadStudentSuggestionSchema,
+  parseResult: z.object({
+    parsedSemester: studyLoadSemesterSchema,
+    parsedSchoolYearStart: z.coerce.number().int().min(1900).max(9999),
+    parsedSchoolYearEnd: z.coerce.number().int().min(1900).max(9999),
+    parsedCourses: z.array(parsedStudyLoadCourseItemSchema).min(1),
+  }),
+  warnings: z.array(z.string()).default([]),
+});
+
 export type StudyLoadCourseApiResponse = z.output<typeof studyLoadCourseApiResponseSchema>;
 export type FileMetadataApiResponse = z.output<typeof fileMetadataApiResponseSchema>;
 export type StudyLoadApiResponse = z.output<typeof studyLoadApiResponseSchema>;
 export type SignedUrlResponse = z.output<typeof signedUrlResponseSchema>;
 export type ParseAndApplyStudyLoadPdfResponse = z.output<typeof parseAndApplyStudyLoadPdfResponseSchema>;
 export type UploadAndParseStudyLoadPdfResponse = z.output<typeof uploadAndParseStudyLoadPdfResponseSchema>;
+export type RegistrationStudyLoadPreviewResponse = z.output<typeof registrationStudyLoadPreviewResponseSchema>;

@@ -14,6 +14,7 @@ import {
 } from "./onboarding.dto";
 import { registerWithStudyLoadResponseSchema, type RegisterWithStudyLoadResponse } from "./onboarding.response";
 import { StudyLoadService } from "../studyloads/studyload.service";
+import type { RegistrationStudyLoadPreviewResponse } from "../studyloads/studyload.response";
 
 export class OnboardingService {
   constructor(
@@ -26,10 +27,11 @@ export class OnboardingService {
     file: Express.Multer.File | undefined,
   ): Promise<RegisterWithStudyLoadResponse> {
     const parsedInput = registerWithStudyLoadInputSchema.parse(input);
-    const parsedStudyLoad = await this.studyLoadService.parseUploadedStudyLoadPdf(file, {
-      requestKind: "registration-studyload-upload",
-      registeredStudentIdNumber: parsedInput.studentIdNumber,
-    });
+    const parsedStudyLoad = parsedInput.parsedStudyLoad
+      ?? await this.studyLoadService.parseUploadedStudyLoadPdf(file, {
+        requestKind: "registration-studyload-upload",
+        registeredStudentIdNumber: parsedInput.studentIdNumber,
+      });
     const transaction = new OnboardingCompensatingTransaction();
     let auth: AuthResult | null = null;
 
@@ -68,6 +70,10 @@ export class OnboardingService {
     } finally {
       await cleanupUploadedFile(file);
     }
+  }
+
+  async previewStudyLoad(file: Express.Multer.File | undefined): Promise<RegistrationStudyLoadPreviewResponse> {
+    return this.studyLoadService.previewRegistrationStudyLoadPdf(file);
   }
 
   private async registerStudent(input: RegisterWithStudyLoadInput): Promise<StudentApiResponse> {

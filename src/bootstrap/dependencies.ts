@@ -1,4 +1,9 @@
-import { createFlashcardAnalyticsRunner, createFlashcardsGenerationRunner, createPerformanceSummaryRunner } from "../agents/flashcards/agent";
+import {
+  createFlashcardAnalyticsRunner,
+  createFlashcardsGenerationRunner,
+  createFlashcardStudyCoachRecapRunner,
+  createPerformanceSummaryRunner,
+} from "../agents/flashcards/agent";
 import { createCertificateParsingRunner, createCertificateSuggestionRunner } from "../agents/certificates/agent";
 import { createNotesGenerationRunner, createNotesSummarizationRunner } from "../agents/notes/agent";
 import { createPdfExtractionRunner } from "../agents/pdf/agent";
@@ -18,7 +23,10 @@ import {
   createSmartQuizRetryVariantRunner,
 } from "../agents/smart-quiz/agent";
 import { createStudyBuddyRunner } from "../agents/study-buddy/agent";
-import { createStudyLoadParsingRunner } from "../agents/studyloads/agent";
+import {
+  createRegistrationStudyLoadPreviewRunner,
+  createStudyLoadParsingRunner,
+} from "../agents/studyloads/agent";
 import { AgentService } from "../features/agent/agent.service";
 import { CertificateService } from "../features/certificates/certificate.service";
 import { FlashcardService } from "../features/flashcards/flashcard.service";
@@ -85,6 +93,7 @@ export function createDependencies(): AppDependencies {
   const flashcardService = new FlashcardService(
     createFlashcardsGenerationRunner(),
     createFlashcardAnalyticsRunner(),
+    createFlashcardStudyCoachRecapRunner(),
     upstreamHttpClient,
     codeExecutionSupervisor,
   );
@@ -122,6 +131,7 @@ export function createDependencies(): AppDependencies {
   );
   const studyLoadService = new StudyLoadService(
     createStudyLoadParsingRunner(),
+    createRegistrationStudyLoadPreviewRunner(),
     upstreamHttpClient,
     pdfProcessingService,
     pdfExtractionService,

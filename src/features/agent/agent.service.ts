@@ -109,6 +109,11 @@ export class AgentService {
           intent: parsedInput.intent,
           result: await this.dependencies.flashcardService.submitLearnSessionAnswer(parsedInput.payload, authHeader),
         });
+      case "generate_flashcard_study_coach_recap":
+        return agentTaskResponseSchema.parse({
+          intent: parsedInput.intent,
+          result: await this.dependencies.flashcardService.generateStudyCoachRecap(parsedInput.payload),
+        });
       case "analyze_resume_with_relations":
         return agentTaskResponseSchema.parse({
           intent: parsedInput.intent,

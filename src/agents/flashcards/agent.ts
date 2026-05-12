@@ -1,13 +1,19 @@
 import { InMemoryRunner, LlmAgent } from "@google/adk";
 
 import { env } from "../../config/env";
-import { flashcardEvaluationOutputSchema, flashcardGenerationOutputSchema, performanceSummaryAiOutputSchema } from "../../features/flashcards/flashcard.dto";
+import {
+  flashcardEvaluationOutputSchema,
+  flashcardGenerationOutputSchema,
+  flashcardStudyCoachRecapOutputSchema,
+  performanceSummaryAiOutputSchema,
+} from "../../features/flashcards/flashcard.dto";
 import { buildFlashcardAgentTools } from "../../features/flashcards/flashcard.tools";
 import { FlashcardService } from "../../features/flashcards/flashcard.service";
 import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
 import { toAdkFunctionTools } from "../shared/adk-tool-adapter";
 import {
   flashcardAnalyticsGenerationAgentInstructions,
+  flashcardStudyCoachRecapAgentInstructions,
   flashcardsAgentInstructions,
   flashcardsGenerationAgentInstructions,
   performanceSummaryGenerationAgentInstructions,
@@ -62,6 +68,27 @@ export function createFlashcardAnalyticsRunner(): InMemoryRunner {
   return new InMemoryRunner({
     appName: env.GOOGLE_ADK_APP_NAME,
     agent: createFlashcardAnalyticsAgent(),
+  });
+}
+
+export function createFlashcardStudyCoachRecapAgent(): LlmAgent {
+  return new LlmAgent({
+    name: "flashcard_study_coach_recap_agent",
+    description: "Creates a concise AImpatin study coach recap for a completed flashcard session.",
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: flashcardStudyCoachRecapAgentInstructions,
+    outputSchema: toGeminiServingSchema(flashcardStudyCoachRecapOutputSchema),
+    outputKey: "flashcard_study_coach_recap_output",
+    generateContentConfig: {
+      temperature: 0.35,
+    },
+  });
+}
+
+export function createFlashcardStudyCoachRecapRunner(): InMemoryRunner {
+  return new InMemoryRunner({
+    appName: env.GOOGLE_ADK_APP_NAME,
+    agent: createFlashcardStudyCoachRecapAgent(),
   });
 }
 

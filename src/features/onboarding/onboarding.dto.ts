@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+import { studyLoadCourseParsingOutputSchema } from "../studyloads/studyload.dto";
+
+const optionalParsedStudyLoadJsonSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value, ctx) => {
+    if (!value) {
+      return undefined;
+    }
+
+    try {
+      return studyLoadCourseParsingOutputSchema.parse(JSON.parse(value));
+    } catch {
+      ctx.addIssue({
+        code: "custom",
+        message: "Reviewed studyload payload is invalid.",
+      });
+
+      return z.NEVER;
+    }
+  });
+
 export const registerWithStudyLoadBodySchema = z.object({
   firstName: z.string().trim().min(1),
   middleName: z.string().trim().optional().or(z.literal("")),
@@ -9,6 +32,7 @@ export const registerWithStudyLoadBodySchema = z.object({
   confirmPassword: z.string().min(1),
   studentIdNumber: z.string().trim().min(1),
   expiresInMinutes: z.coerce.number().int().min(1).max(1440).default(60),
+  parsedStudyLoadJson: optionalParsedStudyLoadJsonSchema,
 });
 
 export const registerWithStudyLoadInputSchema = z.object({
@@ -20,6 +44,7 @@ export const registerWithStudyLoadInputSchema = z.object({
   confirmPassword: z.string().min(1),
   studentIdNumber: z.string().trim().min(1),
   expiresInMinutes: z.coerce.number().int().min(1).max(1440).default(60),
+  parsedStudyLoad: studyLoadCourseParsingOutputSchema.optional(),
 });
 
 export const studentApiResponseSchema = z.object({

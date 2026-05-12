@@ -8,8 +8,10 @@ import { UnauthorizedError } from "../../shared/errors/unauthorized-error";
 import { UpstreamHttpClient } from "../../shared/http/upstream-http-client";
 import {
   createBulkFlashcardsRequestSchema,
+  generateFlashcardStudyCoachRecapInputSchema,
   getActiveFlashcardLearnSessionInputSchema,
   flashcardEvaluationOutputSchema,
+  flashcardStudyCoachRecapOutputSchema,
   flashcardGenerationOutputSchema,
   generateFlashcardsFromNoteInputSchema,
   noteApiResponseSchema,
@@ -20,6 +22,7 @@ import {
   submitAndAnalyzeFlashcardInputSchema,
   type CreateBulkFlashcardItem,
   type FlashcardEvaluationOutput,
+  type GenerateFlashcardStudyCoachRecapInput,
   type GetActiveFlashcardLearnSessionInput,
   type GenerateFlashcardsFromNoteInput,
   type StartFlashcardLearnSessionInput,
@@ -53,6 +56,7 @@ import {
 } from "./flashcard.response";
 import {
   buildFlashcardAnalyticsPrompt,
+  buildFlashcardStudyCoachRecapPrompt,
   buildGenerationPrompt,
   buildPreviewPrompt,
 } from "./flashcard.prompts";
@@ -77,6 +81,7 @@ export class FlashcardService {
   constructor(
     private readonly generationRunner: Runner,
     private readonly analyticsRunner: Runner,
+    private readonly studyCoachRecapRunner: Runner,
     private readonly upstreamHttpClient: UpstreamHttpClient,
     private readonly codeExecutionSupervisor: CodeExecutionSupervisor,
   ) {}
@@ -330,6 +335,13 @@ export class FlashcardService {
       ...persistedResult,
       frontendReview: generatedEvaluation.frontendReview,
     });
+  }
+
+  async generateStudyCoachRecap(input: GenerateFlashcardStudyCoachRecapInput) {
+    const parsedInput = generateFlashcardStudyCoachRecapInputSchema.parse(input);
+    const responseText = await this.runStudyCoachRecapAgent(parsedInput);
+    const parsedResponse = parseJson(responseText, "Flashcard study coach recap agent returned invalid JSON.");
+    return flashcardStudyCoachRecapOutputSchema.parse(parsedResponse);
   }
 
   private async buildEvaluationContextWithExecution(
@@ -767,6 +779,44 @@ export class FlashcardService {
 
     if (!finalResponseText) {
       throw new BadGatewayError("Flashcard analytics agent did not return a final response.");
+    }
+
+    return finalResponseText;
+  }
+
+  private async runStudyCoachRecapAgent(input: GenerateFlashcardStudyCoachRecapInput): Promise<string> {
+    const message: Content = {
+      role: "user",
+      parts: [{ text: buildFlashcardStudyCoachRecapPrompt(input) }],
+    };
+
+    let finalResponseText: string | null = null;
+
+    for await (const event of this.studyCoachRecapRunner.runEphemeral({
+      userId: "flashcard_study_coach_recap_service",
+      newMessage: message,
+    })) {
+      if (event.errorMessage) {
+        throw new BadGatewayError(event.errorMessage);
+      }
+
+      if (!isFinalResponse(event)) {
+        continue;
+      }
+
+      const structuredOutput = event.actions.stateDelta.flashcard_study_coach_recap_output;
+      if (structuredOutput) {
+        return JSON.stringify(structuredOutput);
+      }
+
+      const content = stringifyContent(event).trim();
+      if (content) {
+        finalResponseText = content;
+      }
+    }
+
+    if (!finalResponseText) {
+      throw new BadGatewayError("Flashcard study coach recap agent did not return a final response.");
     }
 
     return finalResponseText;

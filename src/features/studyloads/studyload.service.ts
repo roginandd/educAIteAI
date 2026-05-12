@@ -13,26 +13,34 @@ import {
   parseAndApplyStudyLoadPdfInputSchema,
   studyLoadCourseParsingOutputSchema,
   uploadAndParseStudyLoadPdfInputSchema,
+  registrationStudyLoadPreviewOutputSchema,
   type ApplyParsedStudyLoadCoursesInput,
   type AuthenticatedStudyLoadStudentContext,
   type ParsedStudyLoadCourseItem,
   type ParseAndApplyStudyLoadPdfInput,
+  type RegistrationStudyLoadPreviewOutput,
   type StudyLoadCourseParsingOutput,
   type UploadAndParseStudyLoadPdfInput,
 } from "./studyload.dto";
 import {
   parseAndApplyStudyLoadPdfResponseSchema,
+  registrationStudyLoadPreviewResponseSchema,
   signedUrlResponseSchema,
   studyLoadApiResponseSchema,
   uploadAndParseStudyLoadPdfResponseSchema,
   type ParseAndApplyStudyLoadPdfResponse,
+  type RegistrationStudyLoadPreviewResponse,
   type SignedUrlResponse,
   type StudyLoadApiResponse,
   type UploadAndParseStudyLoadPdfResponse,
 } from "./studyload.response";
 
 export interface StudyLoadParsingContext {
-  requestKind: "registration-studyload-upload" | "upload-parse-and-apply" | "parse-and-apply";
+  requestKind:
+    | "registration-studyload-preview"
+    | "registration-studyload-upload"
+    | "upload-parse-and-apply"
+    | "parse-and-apply";
   studentSqid?: string;
   registeredStudentIdNumber?: string;
   studyLoadSqid?: string;
@@ -43,6 +51,7 @@ export interface StudyLoadParsingContext {
 export class StudyLoadService {
   constructor(
     private readonly parsingRunner: Runner,
+    private readonly registrationPreviewRunner: Runner,
     private readonly upstreamHttpClient: UpstreamHttpClient,
     private readonly pdfProcessingService: PdfProcessingService,
     private readonly pdfExtractionService: PdfExtractionService,
@@ -55,6 +64,32 @@ export class StudyLoadService {
     const parsingContext = requireStudyLoadParsingContext(context);
     const studyLoadFile = this.requireStudyLoadPdf(file);
     return this.parseStudyLoadPdfBase64WithAgent(await readUploadedFileAsBase64(studyLoadFile), parsingContext);
+  }
+
+  async previewRegistrationStudyLoadPdf(
+    file: Express.Multer.File | undefined,
+  ): Promise<RegistrationStudyLoadPreviewResponse> {
+    const studyLoadFile = this.requireStudyLoadPdf(file);
+
+    try {
+      const preview = await this.parseRegistrationStudyLoadPdfBase64WithAgent(
+        await readUploadedFileAsBase64(studyLoadFile),
+      );
+      const suggestedStudent = normalizeRegistrationSuggestedStudent(preview);
+
+      return registrationStudyLoadPreviewResponseSchema.parse({
+        suggestedStudent,
+        parseResult: {
+          parsedSemester: preview.semester,
+          parsedSchoolYearStart: preview.schoolYearStart,
+          parsedSchoolYearEnd: preview.schoolYearEnd,
+          parsedCourses: preview.courses,
+        },
+        warnings: preview.warnings,
+      });
+    } finally {
+      await cleanupUploadedFile(file);
+    }
   }
 
   async uploadParsedStudyLoad(
@@ -302,6 +337,21 @@ export class StudyLoadService {
     });
   }
 
+  private async parseRegistrationStudyLoadPdfBase64WithAgent(
+    pdfBase64: string,
+  ): Promise<RegistrationStudyLoadPreviewOutput> {
+    return this.pdfProcessingService.runStructuredPdfAgentFromBase64({
+      runner: this.registrationPreviewRunner,
+      userId: "studyload_registration_preview",
+      prompt: buildRegistrationStudyLoadPreviewPrompt(),
+      pdfBase64,
+      outputKey: "studyload_parsing_output",
+      outputSchema: registrationStudyLoadPreviewOutputSchema,
+      invalidJsonMessage: "Studyload preview agent returned invalid JSON.",
+      noResponseMessage: "Studyload preview agent did not return a final response.",
+    });
+  }
+
   private async parseStudyLoadFromExtractedText(
     extractedText: string,
     context: StudyLoadParsingContext,
@@ -329,6 +379,142 @@ export class StudyLoadService {
   }
 }
 
+function normalizeRegistrationSuggestedStudent(
+  preview: RegistrationStudyLoadPreviewOutput,
+): RegistrationStudyLoadPreviewOutput["suggestedStudent"] {
+  const parsedIdentity = parseOfficialStudyLoadIdentityLine(preview.studentIdentityLine);
+  const suggestedName = normalizeSuggestedName(preview.suggestedStudent);
+
+  return {
+    firstName: toNameCase(parsedIdentity?.firstName ?? suggestedName.firstName),
+    middleName: toNameCase(parsedIdentity?.middleName ?? suggestedName.middleName),
+    lastName: toNameCase(parsedIdentity?.lastName ?? suggestedName.lastName),
+    studentIdNumber: (parsedIdentity?.studentIdNumber ?? preview.suggestedStudent.studentIdNumber).trim(),
+    program: (parsedIdentity?.program ?? preview.suggestedStudent.program).trim().toUpperCase(),
+    schoolEducation: preview.suggestedStudent.schoolEducation.trim(),
+  };
+}
+
+function normalizeSuggestedName(
+  suggestedStudent: RegistrationStudyLoadPreviewOutput["suggestedStudent"],
+): Pick<RegistrationStudyLoadPreviewOutput["suggestedStudent"], "firstName" | "middleName" | "lastName"> {
+  if (!suggestedStudent.middleName.trim()) {
+    return {
+      firstName: suggestedStudent.firstName,
+      middleName: "",
+      lastName: suggestedStudent.lastName,
+    };
+  }
+
+  return {
+    firstName: cleanNameTokens([suggestedStudent.firstName, suggestedStudent.middleName]),
+    middleName: "",
+    lastName: suggestedStudent.lastName,
+  };
+}
+
+function parseOfficialStudyLoadIdentityLine(
+  identityLine: string,
+): Partial<RegistrationStudyLoadPreviewOutput["suggestedStudent"]> | null {
+  const tokens = identityLine.trim().split(/\s+/).filter(Boolean);
+  const studentIdIndex = tokens.findIndex(isStudentIdToken);
+
+  if (studentIdIndex < 0) {
+    return null;
+  }
+
+  const trailingTokens = tokens.slice(studentIdIndex + 1);
+  const programIndex = findProgramTokenIndex(trailingTokens);
+  const nameTokens = programIndex >= 0 ? trailingTokens.slice(0, programIndex) : trailingTokens;
+  const parsedName = parseStudentNameTokens(nameTokens);
+
+  return {
+    ...parsedName,
+    studentIdNumber: tokens[studentIdIndex],
+    program: programIndex >= 0 ? trailingTokens[programIndex] : undefined,
+  };
+}
+
+function parseStudentNameTokens(
+  tokens: string[],
+): Pick<RegistrationStudyLoadPreviewOutput["suggestedStudent"], "firstName" | "middleName" | "lastName"> {
+  const dotIndex = tokens.findIndex((token) => token === ".");
+  if (dotIndex >= 0) {
+    return {
+      firstName: cleanNameTokens(tokens.slice(0, dotIndex)),
+      middleName: "",
+      lastName: cleanNameTokens(tokens.slice(dotIndex + 1)),
+    };
+  }
+
+  const joinedName = cleanNameTokens(tokens);
+  const commaIndex = joinedName.indexOf(",");
+  if (commaIndex >= 0) {
+    return {
+      firstName: joinedName.slice(commaIndex + 1).trim(),
+      middleName: "",
+      lastName: joinedName.slice(0, commaIndex).trim(),
+    };
+  }
+
+  if (tokens.length <= 1) {
+    return {
+      firstName: cleanNameTokens(tokens),
+      middleName: "",
+      lastName: "",
+    };
+  }
+
+  return {
+    firstName: cleanNameTokens(tokens.slice(0, -1)),
+    middleName: "",
+    lastName: cleanNameTokens(tokens.slice(-1)),
+  };
+}
+
+function cleanNameTokens(tokens: string[]): string {
+  return tokens
+    .filter((token) => token !== ".")
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toNameCase(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/[a-z]+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1));
+}
+
+function findProgramTokenIndex(tokens: string[]): number {
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const token = tokens[index];
+    if (isYearLevelToken(token)) {
+      continue;
+    }
+
+    if (isProgramToken(token)) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function isStudentIdToken(token: string): boolean {
+  return /^\d{5,}$/.test(token);
+}
+
+function isProgramToken(token: string): boolean {
+  return /^[A-Z]{2,}(?:[-A-Z0-9]*)?$/.test(token);
+}
+
+function isYearLevelToken(token: string): boolean {
+  return /^\d(?:st|nd|rd|th)?$/i.test(token);
+}
+
 function buildStudyLoadParsingPrompt(context: StudyLoadParsingContext): string {
   return [
     "RLF-Studyload-Context-Enforcer:",
@@ -342,6 +528,47 @@ function buildStudyLoadParsingPrompt(context: StudyLoadParsingContext): string {
     "Only return semester and school-year values supported by the extracted text.",
     "Ignore non-course content such as headers, student information, page numbers, and totals.",
     "If a row is unreadable or missing a trustworthy EDP code, omit it instead of guessing.",
+  ].join("\n");
+}
+
+function buildRegistrationStudyLoadPreviewPrompt(): string {
+  const requestContext = {
+    requestKind: "registration-studyload-preview",
+    registrationRequest: true,
+  };
+
+  return [
+    "You are the EducAIte registration studyload preview parser.",
+    "This is a pre-registration helper. No account exists yet, and nothing is persisted from this response.",
+    `Request context JSON: ${JSON.stringify(requestContext)}`,
+    "",
+    "Return editable suggestions only from the uploaded studyload PDF.",
+    "Extract student identity and school education fields only when the PDF explicitly supports them.",
+    "If a student field is missing or uncertain, return an empty string for that field.",
+    "Do not invent names, school IDs, programs, courses, semester, or school-year values.",
+    "",
+    'Return only JSON matching this shape: {"studentIdentityLine":"","suggestedStudent":{"firstName":"","middleName":"","lastName":"","studentIdNumber":"","program":"","schoolEducation":""},"semester":1,"schoolYearStart":2025,"schoolYearEnd":2026,"courses":[{"edpCode":"...","courseName":"...","units":3}],"warnings":[]}.',
+    "Recognize student names from labels such as Student Name, Name, Full Name, Student, or Learner.",
+    'Also recognize unlabeled official studyload identity rows like "21436613 ROGINAND . VILLEGAS BSCS 3" directly under "OFFICIAL STUDY LOAD".',
+    "Set studentIdentityLine to the exact raw identity row used for suggestedStudent, or an empty string when no identity row is supported.",
+    'For that row, set studentIdNumber from the first long numeric token, program from the final program-like token such as BSCS or BSIT, and student name from the text between them.',
+    'For "21436613 ROGINAND . VILLEGAS BSCS 3", return {"firstName":"ROGINAND","middleName":"","lastName":"VILLEGAS","studentIdNumber":"21436613","program":"BSCS"}.',
+    'Treat a lone "." inside the name as the split marker: every name token before "." belongs to firstName, and every name token after "." belongs to lastName.',
+    'For "JOHN CARL . ATILLO", return {"firstName":"JOHN CARL","middleName":"","lastName":"ATILLO"}. Do not return middleName "CARL".',
+    'For comma-form names like "Dela Cruz, Juan Santos", return {"firstName":"Juan Santos","middleName":"","lastName":"Dela Cruz"}.',
+    'For forward-form names like "Juan Santos Dela Cruz", keep multi-word given names in firstName; do not automatically use the second token as middleName.',
+    "Do not use adviser, registrar, instructor, department, college, or school names as the student name.",
+    "Use studentIdNumber for labels such as Student ID, ID No., Student No., or ID Number.",
+    "Use program for the student's academic program or course, such as BSCS, BSIT, or Bachelor of Science in Computer Science.",
+    'Use schoolEducation for the top school header, college, department, or education level shown in the PDF, such as "UNIVERSITY OF CEBU - MAIN".',
+    "",
+    "Course extraction rules:",
+    "- Extract only real course rows supported by the PDF.",
+    "- Treat EDP code as the primary identity for a course row.",
+    "- Keep course names concise and cleaned of obvious OCR noise.",
+    "- Normalize units to integers.",
+    "- Deduplicate repeated rows.",
+    "- Omit unreadable rows instead of guessing.",
   ].join("\n");
 }
 
@@ -362,6 +589,10 @@ function requireStudyLoadParsingContext(context: StudyLoadParsingContext): Study
       || parsedContext.studyLoadSqid
       || parsedContext.studyLoadStudentSqid,
   );
+
+  if (parsedContext.requestKind === "registration-studyload-preview") {
+    return parsedContext;
+  }
 
   if (!parsedContext.requestKind || !hasIdentity) {
     throw new AppError(

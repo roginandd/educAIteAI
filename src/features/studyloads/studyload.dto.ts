@@ -72,6 +72,21 @@ export const studyLoadCourseParsingOutputSchema = z.object({
   courses: z.array(parsedStudyLoadCourseItemSchema).min(1),
 });
 
+export const registrationStudyLoadStudentSuggestionSchema = z.object({
+  firstName: z.string().trim().default(""),
+  middleName: z.string().trim().default(""),
+  lastName: z.string().trim().default(""),
+  studentIdNumber: z.string().trim().default(""),
+  program: z.string().trim().default(""),
+  schoolEducation: z.string().trim().default(""),
+});
+
+export const registrationStudyLoadPreviewOutputSchema = studyLoadCourseParsingOutputSchema.extend({
+  studentIdentityLine: z.string().trim(),
+  suggestedStudent: registrationStudyLoadStudentSuggestionSchema,
+  warnings: z.array(z.string().trim().min(1)).default([]),
+});
+
 export type ParsedStudyLoadCourseItem = z.output<typeof parsedStudyLoadCourseItemSchema>;
 export type ApplyParsedStudyLoadCoursesRequest = z.output<typeof applyParsedStudyLoadCoursesRequestSchema>;
 export type ApplyParsedStudyLoadCoursesParams = z.output<typeof applyParsedStudyLoadCoursesParamsSchema>;
@@ -84,3 +99,4 @@ export type AuthenticatedStudyLoadStudentContext = z.output<typeof authenticated
 export type UploadAndParseStudyLoadPdfBody = z.output<typeof uploadAndParseStudyLoadPdfBodySchema>;
 export type UploadAndParseStudyLoadPdfInput = z.output<typeof uploadAndParseStudyLoadPdfInputSchema>;
 export type StudyLoadCourseParsingOutput = z.output<typeof studyLoadCourseParsingOutputSchema>;
+export type RegistrationStudyLoadPreviewOutput = z.output<typeof registrationStudyLoadPreviewOutputSchema>;

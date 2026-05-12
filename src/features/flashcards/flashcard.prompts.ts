@@ -1,4 +1,4 @@
-import type { GenerateFlashcardsFromNoteInput } from "./flashcard.dto";
+import type { GenerateFlashcardStudyCoachRecapInput, GenerateFlashcardsFromNoteInput } from "./flashcard.dto";
 import type { FlashcardAnalyticsEvaluationContextResponse } from "./flashcard.response";
 import {
   inferPreviewItemTypes,
@@ -339,6 +339,40 @@ export function buildFlashcardAnalyticsPrompt(
     }),
     "",
     "Evaluation context:",
+    JSON.stringify(compactContext),
+  ].join("\n");
+}
+
+export function buildFlashcardStudyCoachRecapPrompt(input: GenerateFlashcardStudyCoachRecapInput): string {
+  const compactContext = {
+    sessionSqid: input.sessionSqid,
+    totalCards: input.totalCards,
+    completedCards: input.completedCards,
+    correctCount: input.correctCount,
+    repeatCount: input.repeatCount,
+    averageQualityScore: input.averageQualityScore,
+    strongSignals: input.strongSignals.slice(0, 5),
+    weakSignals: input.weakSignals.slice(0, 5),
+    latestReview: input.latestReview ?? null,
+  };
+
+  return [
+    "Create an AImpatin flashcard study coach recap for this completed session.",
+    "Return only JSON.",
+    'Return exactly this shape: {"headline":"...","improved":["..."],"stillWeak":["..."],"nextStep":"...","cheerLine":"...","quickPhrases":["Good job.","Nice progress.","Review this next."],"tone":"strong | mixed | weak","mascotEmotion":"happy | proud | thinking | sad | encouraging"}',
+    "Rules:",
+    "- Use only the supplied session summary.",
+    "- Start from the evidence, not generic encouragement.",
+    "- Say Good job naturally when the student completed cards.",
+    "- If weakSignals is non-empty, stillWeak must mention the top weak signal.",
+    "- If weakSignals is empty, stillWeak must say there is no major weak spot from this run.",
+    "- nextStep must be one concrete action the student can do immediately.",
+    "- Use mascotEmotion proud or happy for strong sessions.",
+    "- Use mascotEmotion encouraging or thinking for mixed sessions.",
+    "- Use mascotEmotion sad only for weak sessions, and keep it supportive rather than discouraging.",
+    "- Keep each sentence short enough for a floating mascot bubble.",
+    "",
+    "Session summary:",
     JSON.stringify(compactContext),
   ].join("\n");
 }

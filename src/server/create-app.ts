@@ -13,6 +13,8 @@ import { createStudentPerformanceRouter } from "../features/student-performance/
 import { createStudyLoadRouter } from "../features/studyloads/studyload.routes";
 import { AppError } from "../shared/errors/app-error";
 
+const jsonBodyLimit = "2mb";
+
 export function createApp(dependencies: AppDependencies) {
   const app = express();
   const allowedOrigin = "http://localhost:5173";
@@ -36,7 +38,7 @@ export function createApp(dependencies: AppDependencies) {
     next();
   });
 
-  app.use(express.json());
+  app.use(express.json({ limit: jsonBodyLimit }));
 
   app.get("/health", (_req, res) => {
     res.status(200).json({
@@ -56,6 +58,18 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/api/studyloads", createStudyLoadRouter(dependencies.studyLoadService));
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (isPayloadTooLargeError(error)) {
+      res.status(413).json({
+        code: "PAYLOAD_TOO_LARGE",
+        message: `Request body is too large. Keep the submitted content under ${jsonBodyLimit}.`,
+        details: {
+          limitBytes: error.limit,
+          receivedBytes: error.received,
+        },
+      });
+      return;
+    }
+
     if (error instanceof ZodError) {
       res.status(400).json({
         code: "VALIDATION_ERROR",
@@ -82,4 +96,16 @@ export function createApp(dependencies: AppDependencies) {
   });
 
   return app;
+}
+
+function isPayloadTooLargeError(error: unknown): error is {
+  type: string;
+  limit?: number;
+  received?: number;
+} {
+  return (
+    typeof error === "object"
+    && error !== null
+    && (error as { type?: unknown }).type === "entity.too.large"
+  );
 }

@@ -7,6 +7,7 @@ import {
   submitAndAnalyzeFlashcardResponseSchema,
   submitFlashcardLearnAnswerResponseSchema,
 } from "../flashcards/flashcard.response";
+import { flashcardStudyCoachRecapOutputSchema } from "../flashcards/flashcard.dto";
 import { generateNoteFromDocumentResponseSchema, summarizeNoteResponseSchema } from "../notes/note.response";
 import {
   analyzeResumeWithRelationsResponseSchema,
@@ -51,6 +52,10 @@ export const agentTaskResponseSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("submit_flashcard_learn_session_answer"),
     result: submitFlashcardLearnAnswerResponseSchema,
+  }),
+  z.object({
+    intent: z.literal("generate_flashcard_study_coach_recap"),
+    result: flashcardStudyCoachRecapOutputSchema,
   }),
   z.object({
     intent: z.literal("analyze_resume_with_relations"),

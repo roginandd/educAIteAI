@@ -292,6 +292,47 @@ export const flashcardEvaluationOutputSchema = z.object({
   frontendReview: flashcardFrontendReviewOutputSchema,
 });
 
+export const flashcardStudyCoachToneSchema = z.enum(["strong", "mixed", "weak"]);
+
+export const flashcardMascotEmotionSchema = z.enum(["happy", "proud", "thinking", "sad", "encouraging"]);
+
+const flashcardStudyCoachSignalSchema = z.object({
+  flashcardSqid: z.string().trim().min(1).optional().default(""),
+  question: z.string().trim().min(1).max(240),
+  itemType: z.string().trim().min(1).max(80).default("Flashcard"),
+  qualityScore: z.number().int().min(0).max(5).nullable().optional(),
+  result: z.enum(["correct", "weak", "repeat", "unknown"]).default("unknown"),
+  feedback: z.string().trim().max(500).optional().default(""),
+});
+
+export const generateFlashcardStudyCoachRecapInputSchema = z.object({
+  sessionSqid: z.string().trim().min(1),
+  totalCards: z.number().int().min(0).max(100),
+  completedCards: z.number().int().min(0).max(100),
+  correctCount: z.number().int().min(0).max(100),
+  repeatCount: z.number().int().min(0).max(100),
+  averageQualityScore: z.number().finite().min(0).max(5),
+  strongSignals: z.array(flashcardStudyCoachSignalSchema).max(5).default([]),
+  weakSignals: z.array(flashcardStudyCoachSignalSchema).max(5).default([]),
+  latestReview: z.object({
+    resultTone: z.enum(["correct", "close", "partial", "incorrect"]).optional(),
+    answerReview: z.string().trim().max(500).default(""),
+    conceptExplanation: z.string().trim().max(500).default(""),
+    missingPart: z.string().trim().max(500).default(""),
+  }).nullable().optional(),
+});
+
+export const flashcardStudyCoachRecapOutputSchema = z.object({
+  headline: z.string().trim().min(1).max(120),
+  improved: z.array(z.string().trim().min(1).max(160)).min(1).max(3),
+  stillWeak: z.array(z.string().trim().min(1).max(160)).min(1).max(3),
+  nextStep: z.string().trim().min(1).max(180),
+  cheerLine: z.string().trim().min(1).max(140),
+  quickPhrases: z.array(z.string().trim().min(1).max(80)).min(3).max(5),
+  tone: flashcardStudyCoachToneSchema,
+  mascotEmotion: flashcardMascotEmotionSchema,
+});
+
 export const performanceSummaryAiOutputSchema = z.object({
   aiStatus: flashcardAiStatusSchema,
   aiInsight: performanceSummaryAiTextSchema,
@@ -346,6 +387,8 @@ export type FlashcardAttemptEvaluationOutput = z.output<typeof flashcardAttemptE
 export type FlashcardAnalyticsOutput = z.output<typeof flashcardAnalyticsOutputSchema>;
 export type FlashcardFrontendReviewOutput = z.output<typeof flashcardFrontendReviewOutputSchema>;
 export type FlashcardEvaluationOutput = z.output<typeof flashcardEvaluationOutputSchema>;
+export type GenerateFlashcardStudyCoachRecapInput = z.output<typeof generateFlashcardStudyCoachRecapInputSchema>;
+export type FlashcardStudyCoachRecapOutput = z.output<typeof flashcardStudyCoachRecapOutputSchema>;
 export type PerformanceSummaryAiOutput = z.output<typeof performanceSummaryAiOutputSchema>;
 export type UpsertPerformanceSummaryAiRequest = z.output<typeof upsertPerformanceSummaryAiRequestSchema>;
 export type SubmitEvaluatedFlashcardAttemptRequest = z.output<typeof submitEvaluatedFlashcardAttemptRequestSchema>;

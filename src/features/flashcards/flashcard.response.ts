@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { flashcardEvaluationOutputSchema } from "./flashcard.dto";
+import { flashcardEvaluationOutputSchema, flashcardStudyCoachRecapOutputSchema } from "./flashcard.dto";
 
 const flashcardDraftItemTypeSchema = z.enum([
   "Flashcard",
@@ -392,6 +392,7 @@ export const submitFlashcardLearnAnswerResponseSchema = z.object({
   session: flashcardSessionResponseSchema,
   answer: flashcardSessionAnswerEvaluationResultResponseSchema,
   frontendReview: flashcardFrontendReviewResponseSchema,
+  studyCoachRecap: flashcardStudyCoachRecapOutputSchema.nullable().optional(),
 });
 
 export const studentCoursePerformanceSummaryResponseSchema = z.object({
@@ -501,6 +502,7 @@ export type FlashcardAnalyticsProgressSnapshotResponse = z.output<typeof flashca
 export type FlashcardAnalyticsRecentAnswerResponse = z.output<typeof flashcardAnalyticsRecentAnswerResponseSchema>;
 export type FlashcardAnalyticsEvaluationContextResponse = z.output<typeof flashcardAnalyticsEvaluationContextResponseSchema>;
 export type FlashcardFrontendReviewResponse = z.output<typeof flashcardFrontendReviewResponseSchema>;
+export type FlashcardStudyCoachRecapResponse = z.output<typeof flashcardStudyCoachRecapOutputSchema>;
 export type SubmitAndAnalyzeFlashcardResponse = z.output<typeof submitAndAnalyzeFlashcardResponseSchema>;
 export type EvaluateFlashcardAnswerResponse = z.output<typeof evaluateFlashcardAnswerResponseSchema>;
 export type FlashcardSessionItemResponse = z.output<typeof flashcardSessionItemResponseSchema>;

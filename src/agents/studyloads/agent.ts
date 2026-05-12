@@ -1,7 +1,10 @@
 import { InMemoryRunner, LlmAgent } from "@google/adk";
 
 import { env } from "../../config/env";
-import { studyLoadCourseParsingOutputSchema } from "../../features/studyloads/studyload.dto";
+import {
+  registrationStudyLoadPreviewOutputSchema,
+  studyLoadCourseParsingOutputSchema,
+} from "../../features/studyloads/studyload.dto";
 import { buildStudyLoadAgentTools } from "../../features/studyloads/studyload.tools";
 import { StudyLoadService } from "../../features/studyloads/studyload.service";
 import { toGeminiServingSchema } from "../../shared/ai/gemini-serving-schema";
@@ -32,9 +35,30 @@ export function createStudyLoadParsingAgent(): LlmAgent {
   });
 }
 
+export function createRegistrationStudyLoadPreviewAgent(): LlmAgent {
+  return new LlmAgent({
+    name: "studyload_registration_preview_agent",
+    description: "Parses a registration studyload PDF into editable student suggestions and normalized course rows.",
+    model: env.GOOGLE_GENAI_MODEL,
+    instruction: studyloadPdfParsingAgentInstructions,
+    outputSchema: toGeminiServingSchema(registrationStudyLoadPreviewOutputSchema),
+    outputKey: "studyload_parsing_output",
+    generateContentConfig: {
+      temperature: 0,
+    },
+  });
+}
+
 export function createStudyLoadParsingRunner(): InMemoryRunner {
   return new InMemoryRunner({
     appName: env.GOOGLE_ADK_APP_NAME,
     agent: createStudyLoadParsingAgent(),
+  });
+}
+
+export function createRegistrationStudyLoadPreviewRunner(): InMemoryRunner {
+  return new InMemoryRunner({
+    appName: env.GOOGLE_ADK_APP_NAME,
+    agent: createRegistrationStudyLoadPreviewAgent(),
   });
 }

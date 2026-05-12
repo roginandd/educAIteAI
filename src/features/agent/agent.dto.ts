@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  generateFlashcardStudyCoachRecapInputSchema,
   generateFlashcardsFromNoteInputSchema,
   submitAndAnalyzeFlashcardInputSchema,
   submitFlashcardLearnAnswerInputSchema,
@@ -33,6 +34,7 @@ export const agentTaskIntentSchema = z.enum([
   "submit_and_analyze_flashcard_answer",
   "evaluate_flashcard_answer",
   "submit_flashcard_learn_session_answer",
+  "generate_flashcard_study_coach_recap",
   "analyze_resume_with_relations",
   "tailor_resume_for_job",
   "suggest_student_job_targets",
@@ -77,6 +79,11 @@ const evaluateFlashcardAnswerTaskSchema = z.object({
 const submitFlashcardLearnSessionAnswerTaskSchema = z.object({
   intent: z.literal("submit_flashcard_learn_session_answer"),
   payload: submitFlashcardLearnAnswerInputSchema,
+});
+
+const generateFlashcardStudyCoachRecapTaskSchema = z.object({
+  intent: z.literal("generate_flashcard_study_coach_recap"),
+  payload: generateFlashcardStudyCoachRecapInputSchema,
 });
 
 const analyzeResumeWithRelationsTaskSchema = z.object({
@@ -132,6 +139,7 @@ export const agentTaskBodySchema = z.discriminatedUnion("intent", [
   submitAndAnalyzeFlashcardAnswerTaskSchema,
   evaluateFlashcardAnswerTaskSchema,
   submitFlashcardLearnSessionAnswerTaskSchema,
+  generateFlashcardStudyCoachRecapTaskSchema,
   analyzeResumeWithRelationsTaskSchema,
   tailorResumeForJobTaskSchema,
   suggestStudentJobTargetsTaskSchema,
